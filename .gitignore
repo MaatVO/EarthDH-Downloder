@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+packaging/agent.zip
+
+# secrets / credentials: never commit
+.env
+.env.*
+.netrc
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+secrets.*
+credentials*
+servers.json
+keys.json

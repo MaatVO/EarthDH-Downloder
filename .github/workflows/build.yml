@@ -1,0 +1,22 @@
+# Executables for the three platforms: the server needs the Linux one; your computer needs its own
+# (to run `edh-dl` as the SSH client app). Runs on tags and by hand once the repository has a GitHub remote.
+name: build
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: bash packaging/build.sh
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edh-dl-${{ runner.os }}-${{ runner.arch }}
+          path: dist/edh-dl*

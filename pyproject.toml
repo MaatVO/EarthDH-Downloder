@@ -1,0 +1,34 @@
+[project]
+name = "edh-downloader"
+version = "0.2.0"
+description = "Download Earth Data Hub (ERA5) subsets to Icechunk/Zarr, with a web UI and detached jobs"
+readme = "README.md"
+authors = [
+    { name = "Mattia Varagnolo" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.14.5",
+    "asyncssh>=2.24.1",
+    "icechunk>=2.3.1",
+    "nicegui>=3.19.0",
+    "numcodecs>=0.17.1",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "xarray>=2026.9.0",
+    "zarr>=3",
+]
+
+[project.scripts]
+edh-dl = "edh_downloader.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "playwright>=1.64.1",
+    "pyinstaller>=6.22.3",
+    "pytest>=9.2.0",
+]
