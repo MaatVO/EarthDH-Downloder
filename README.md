@@ -1,167 +1,748 @@
+<div align="center">
+
 # EDH Downloader
 
-Download subsets of [Earth Data Hub](https://earthdatahub.destine.eu) datasets (ERA5 single levels, pressure
-levels, ERA5-Land, monthly/daily products, …) into an **Icechunk** repository and a plain **Zarr v3** store, from a
-**web UI** you reach over SSH. Downloads run as **detached background jobs**: close the browser, stop the UI or
-drop the SSH connection and they keep going.
+### A powerful, resumable downloader for Earth Data Hub datasets.
 
-* pick dataset, variables and pressure levels from the live catalogue (STAC + each store's `zarr.json`);
-* time range plus an optional time step: as stored, every N hours, daily, monthly or yearly, with per-variable
-  statistics (mean, min, max, sum, first) and a configurable day boundary (UTC offset);
-* global, a lat/lon box (antimeridian-safe, drawn on a map or typed) or a list of points (nearest grid cell);
-* exact cost before you start: number of requests vs. your remaining monthly quota, download size, output size;
-* every source chunk is fetched **once**; jobs commit to Icechunk unit by unit, so they pause/resume/crash-recover
-  without re-downloading;
-* optional sample (a dozen real chunks of the job, counted in your quota) that measures download size, Zarr size
-  and line speed, and *suggests* a number of parallel connections (you choose the number);
-* output metadata records the full job, source, dataset version, app version and request count.
+Download, subset, aggregate and store large-scale climate and meteorological datasets in **Icechunk and Zarr v3**, through an interactive web interface or command-line workflow.
 
-## Run it
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Zarr](https://img.shields.io/badge/Zarr-v3-orange)](https://zarr.dev/)
+[![Icechunk](https://img.shields.io/badge/Storage-Icechunk-blue)](https://icechunk.io/)
+[![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/EarthDH-Downloder/build.yml?label=build)](.github/workflows/build.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/MaatVO/EarthDH-Downloder)](https://github.com/MaatVO/EarthDH-Downloder/releases)
 
-**The app on your computer (recommended).** Run `edh-dl` on your computer with no arguments (or double-click
-it): it opens a **Connect** page in your browser. Enter the server (an `~/.ssh/config` alias works, as do
-ProxyJump and certificates) and log in with your SSH key/agent or a password. You get the interface in a tab;
-connect to more servers and each gets its own tab. The interface always runs on your computer, in the version you
-are running. The server only does the work: keys, quota, downloads, jobs and files stay there.
+[Features](#features) · [Installation](#installation) · [Getting Started](#getting-started) · [CLI](#command-line-interface) · [Output](#output-formats) · [Architecture](#architecture)
 
-* First time on a server: it shows the host-key fingerprint and asks before trusting it (like ssh).
-* The server needs no edh-dl install. On first connection the app creates a Python environment in
-  `~/.local/share/edh-dl` (numpy, zarr, icechunk … from PyPI, about 300 MB, once; uses `uv` when present, else
-  `python3 -m venv` with Python 3.12 or newer). After that it only sends the app's Python code, a zip of a few
-  hundred KB, when it changed.
-* Servers are remembered in `~/.config/edh-dl/servers.json`, passwords never.
-* Hosts in `~/.ssh/config` (and its `Include`s) are offered as presets; pick one and its HostName, User, Port,
-  ProxyJump and keys apply as with ssh (leave User/Port empty to use them).
-* No server? **This computer** on the Connect page opens the same UI locally in its own tab: jobs, files and
-  keys stay on your computer.
-* Closing a tab (×) disconnects that server, after asking. Closing the browser tab, or **Quit**, closes the
-  app and all its connections (the browser asks first). Download jobs are separate processes: they keep
-  running, here or on the servers, and show up in **Jobs** again when you reconnect.
+</div>
 
-Executables are per platform (`packaging/build.sh` builds for the machine it runs on; the GitHub workflow in
-`.github/workflows/build.yml` builds Linux, macOS and Windows on every push to `main` and publishes them under
-[Releases](../../releases), versioned `v<major>.<minor>.<run number>`; the major.minor comes from `pyproject.toml`). The packaged
-executable updates itself: every time the app starts it checks the latest release, and if a newer one exists it
-downloads it (checked against the release's `.sha256`), replaces itself and restarts. Skip with `--no-update` or
-`EDH_DL_NO_UPDATE=1`; `edh-dl update` checks on demand. (Not for source / `uv tool install`.) Without an
-executable for your computer: `uv tool install /path/to/edh-downloader` (any OS), then `edh-dl`.
+---
 
-**Without the app, only ssh** (no manual port forwarding either). Get the launcher once, with ssh, then just run it: it opens the SSH tunnel, starts the UI on the server and
-opens your browser. Ctrl+C closes it; download jobs keep running on the server.
+## Overview
+
+**EDH Downloader** is a Python application designed to make downloading and preparing large-scale Earth observation and climate datasets from [Earth Data Hub](https://earthdatahub.destine.eu/) straightforward, efficient and reproducible.
+
+It provides an interactive web interface, a command-line interface and a remote execution workflow over SSH.
+
+Rather than downloading entire datasets, users can precisely define their data requirements, estimate download costs, select spatial and temporal subsets, configure aggregation strategies and choose how their data should be stored.
+
+Downloads run as independent background jobs. They can be interrupted, resumed or monitored without keeping the browser open or maintaining an active SSH connection.
+
+### Why EDH Downloader?
+
+Working with large meteorological datasets often involves more than retrieving files. It requires managing API quotas, selecting relevant variables, extracting spatial subsets, handling temporal resolutions and organizing data into formats suitable for scientific computing.
+
+EDH Downloader brings these operations together in a single workflow.
+
+## Features
+
+### 🌍 Dataset discovery and selection
+
+- Browse available datasets directly from the Earth Data Hub catalogue.
+- Discover variables and pressure levels from live STAC metadata and Zarr store structures.
+- Support for ERA5 Single Levels, ERA5 Pressure Levels, ERA5-Land and monthly/daily products.
+- Inspect available temporal and spatial coordinates before downloading.
+
+### 📅 Flexible temporal selection
+
+- Define custom start and end dates.
+- Retrieve data at its original temporal resolution or resample it.
+- Supported output frequencies:
+  - Original resolution
+  - Every N hours
+  - Daily
+  - Monthly
+  - Yearly
+- Configure aggregation independently for each variable:
+  - Mean
+  - Minimum
+  - Maximum
+  - Sum
+  - First value
+- Configure the day boundary using a custom UTC offset.
+
+### 🗺️ Spatial subsetting
+
+Choose exactly which geographical data you need:
+
+- **Global:** download the entire spatial domain.
+- **Bounding box:** select a latitude/longitude region.
+- **Interactive map:** draw the geographical selection directly on the map.
+- **Point extraction:** retrieve the nearest grid cell for a list of geographical coordinates.
+
+Bounding-box selection is antimeridian-safe, making it suitable for regions crossing the ±180° longitude boundary.
+
+### 📊 Download planning and cost estimation
+
+Understand the cost of a download before starting it.
+
+The planning engine estimates:
+
+- Number of API requests (source chunks).
+- Expected download size.
+- Expected output size.
+- Remaining monthly API quota.
+- Estimated storage requirements.
+
+An optional sampling operation downloads a selection of real source chunks to measure actual transfer speeds, compression ratios and output sizes.
+
+It can also recommend a suitable number of parallel connections.
+
+Sampling uses 12 real API requests and requires explicit confirmation.
+
+### ⚡ Resumable background downloads
+
+Downloads are designed to be robust, even when working with large datasets or unreliable connections.
+
+- Jobs execute independently of the web interface.
+- Close your browser or disconnect from SSH without stopping a download.
+- Pause, resume and cancel running jobs.
+- Monitor progress, transfer rates, estimated completion time and API usage.
+- Dynamically change the number of parallel connections.
+- Recover interrupted jobs without downloading already committed chunks again.
+
+Each download is organized into processing units aligned with the source data's chunk structure.
+
+Every completed unit is committed to Icechunk, providing a reliable checkpoint for recovery.
+
+### 🧊 Modern scientific storage
+
+EDH Downloader uses [Icechunk](https://icechunk.io/) as its transactional storage layer and supports exporting datasets to standard [Zarr v3](https://zarr.dev/) stores.
+
+Features include:
+
+- Chunk-aligned downloads.
+- Transactional commits.
+- Resumable processing.
+- Configurable chunk layouts.
+- Optional sharding.
+- Multiple compression codecs.
+- Float32 and Float64 output.
+- Optional bit-rounding for reduced storage requirements.
+- Consolidated metadata for convenient Xarray access.
+
+### 🔌 Remote execution over SSH
+
+Run the application on a remote Linux server and access it through your local browser.
+
+The integrated SSH workflow provides:
+
+- SSH key, agent and password authentication.
+- Compatibility with existing `~/.ssh/config` aliases.
+- Support for `ProxyJump`, custom ports and certificates.
+- Automatic SSH tunnelling and port selection.
+- Remote background job management.
+- Independent execution on multiple servers.
+
+The interface runs locally on your computer, while computation, API keys, downloads and output files remain on the remote machine.
+
+### 🖥️ Cross-platform standalone application
+
+EDH Downloader can be distributed as a standalone executable.
+
+Pre-built releases are provided through GitHub Releases for:
+
+- Linux
+- macOS
+- Windows
+
+The packaged application supports automatic updates, with release checksums verified before installation.
+
+---
+
+## Installation
+
+### Option 1 — Standalone application (recommended)
+
+Download the latest executable for your operating system from:
+
+**[GitHub Releases](https://github.com/MaatVO/EarthDH-Downloder/releases)**
+
+Launch the application:
 
 ```bash
-# macOS / Linux / WSL (needs only ssh)
-ssh me@server '/path/to/edh-dl launcher sh' > edh-connect && chmod +x edh-connect
-./edh-connect                     # or ./edh-connect other@host
-
-# Windows 10/11 (built-in OpenSSH)
-ssh me@server "/path/to/edh-dl launcher ps1" > edh-connect.ps1
-powershell -ExecutionPolicy Bypass -File edh-connect.ps1
-
-# a Linux machine with edh-dl installed
-edh-dl connect me@server --cmd /path/to/edh-dl
+./edh-dl
 ```
 
-The launcher picks free ports, sends a fresh access token over the SSH session (never on a command line), and
-the server exits when the launcher closes. Manually: `./edh-dl serve` on the server prints the link (and the
-launcher commands); `ssh -L 8765:localhost:8765 server` on your machine. Run on your own computer, `edh-dl serve`
-opens the browser itself.
+On Windows, launch the downloaded executable.
 
-The UI listens on `127.0.0.1` only and requires the token (shared servers: other users can reach localhost ports).
+The application opens a connection page in your browser, where you can select a remote server or run everything locally.
 
-From source (Python ≥ 3.12, [uv](https://docs.astral.sh/uv/)):
+### Option 2 — Install from source
+
+Requirements:
+
+- Python 3.12 or newer.
+- [uv](https://docs.astral.sh/uv/).
+
+Clone the repository:
+
+```bash
+git clone https://github.com/MaatVO/EarthDH-Downloder.git
+
+cd EarthDH-Downloder
+```
+
+Install dependencies:
 
 ```bash
 uv sync
+```
+
+Start the application:
+
+```bash
 uv run edh-dl serve
 ```
 
-Build the executable: `packaging/build.sh` → `dist/edh-dl` (~88 MB).
+### Option 3 — Install as a Python tool
 
-## API keys and quota
-
-Add a key in the **Keys** tab (or `edh-dl keys add NAME`). Keys are stored in `~/.config/edh-dl/keys.json`
-(mode 600); a key in `~/.netrc` (`machine data.earthdatahub.destine.eu`) is used automatically. Job files and
-outputs only ever contain the key's name.
-
-Free access gives **500,000 requests per month** (resets on the 1st, UTC); one chunk = one request. Earth Data Hub
-does not expose the remaining quota to API-key clients, so the app counts its own requests per key and month in
-`~/.local/share/edh-dl/usage.json` (shared by all jobs). Use **calibrate** with the "used" number from the
-[quota page](https://earthdatahub.destine.eu/quota-api-keys) to include requests made by other tools. Jobs stop at
-a configurable share of the quota (default 90%) and then either wait for the monthly reset and continue, or pause.
-The ↗ next to the quota in the header and **Check on Earth Data Hub** in Keys open that page.
-
-Catalogue reads are cheap: a dataset's structure and coordinates cost ~5 requests and are cached for 3 days.
-
-## Jobs
-
-A job is a folder `~/.local/share/edh-dl/jobs/<id>/` with `job.json` (spec), `state.json` (progress), `log.txt`,
-`control.json` (connections / pause / cancel) and a temporary directory of raw chunks (deleted as soon as they are processed).
-The **Jobs** tab shows progress, rate, ETA, requests; you can change connections of a running job, pause, resume,
-cancel, read the log, or clone a job into a new one. A completed job's **Structure** button draws the store as
-written, read from disk (real chunks, codecs, sizes); long variable lists open in full with **See all**.
-
-Headless equivalents:
+If you already have the repository locally:
 
 ```bash
-edh-dl datasets                       # list ERA5 datasets
-edh-dl variables era5-pressure-levels # variables, levels, time range
-edh-dl plan job.json                  # cost of a job file (save one from the UI with "job.json")
-edh-dl run job.json --detach          # start in the background
-edh-dl jobs | status ID | log ID | pause ID | resume ID [--connections N] | cancel ID | export ID
-edh-dl plan job.json --sample             # measure on 12 real chunks (USES 12 requests; asks first)
+uv tool install /path/to/EarthDH-Downloder
 ```
 
-## Output
+Then launch it using:
 
-Format **Zarr + Icechunk** (CLI default): `<directory>/<name>.zarr`, a plain Zarr v3 store, plus the Icechunk
-repository `<directory>/<name>.icechunk` the download goes through (one commit per unit: that is what makes jobs
-resumable). **Zarr** deletes the repository after the export; **Icechunk only** (default) skips the export.
-Consolidated metadata is written so `xr.open_zarr(path)` opens without warnings (it is optional in Zarr v3).
+```bash
+edh-dl
+```
+
+---
+
+## Getting Started
+
+### 1. Configure your Earth Data Hub API key
+
+Obtain an API key from [Earth Data Hub](https://earthdatahub.destine.eu/).
+
+You can configure it through the application's **Keys** tab or using the CLI:
+
+```bash
+edh-dl keys add my-key
+```
+
+Keys are stored locally in:
+
+```text
+~/.config/edh-dl/keys.json
+```
+
+The application also supports reading credentials from `~/.netrc`:
+
+```text
+machine data.earthdatahub.destine.eu
+login YOUR_USERNAME
+password YOUR_API_KEY
+```
+
+API keys are never written into job specifications or output metadata. Only the associated key name is recorded.
+
+### 2. Select your dataset
+
+Open the application and browse the available Earth Data Hub datasets.
+
+Select the dataset and the variables you want to retrieve.
+
+For pressure-level products, you can also select the required pressure levels.
+
+### 3. Configure your selection
+
+Define:
+
+- Temporal range.
+- Temporal resolution and aggregation.
+- Spatial domain.
+- Output variables and pressure levels.
+
+The application will retrieve the necessary catalogue metadata and prepare a download plan.
+
+### 4. Review the download plan
+
+Before starting, inspect:
+
+- Estimated number of requests.
+- Expected download size.
+- Expected output size.
+- API quota consumption.
+
+Optionally run a sampling operation to benchmark actual transfer performance.
+
+### 5. Configure storage
+
+Select your preferred output format and configure:
+
+- Chunk layout.
+- Compression codec.
+- Compression level.
+- Sharding.
+- Data type.
+- Optional bit-rounding.
+- Additional global metadata.
+
+### 6. Start and monitor the job
+
+Start the download and monitor its progress through the **Jobs** tab.
+
+You can pause, resume, cancel or adjust the parallel connections of a running job.
+
+Jobs remain available when you reconnect to the application.
+
+---
+
+## Remote Execution
+
+EDH Downloader supports two approaches to remote execution.
+
+### A. Using the desktop application
+
+The recommended workflow is to run the standalone application on your local computer.
+
+1. Launch `edh-dl`.
+2. Open the connection page.
+3. Select an SSH host or enter a server address.
+4. Authenticate using your SSH key, agent or password.
+5. Start working through the browser interface.
+
+The first connection automatically prepares the required Python environment on the remote server.
+
+The server does not need a manually installed copy of EDH Downloader.
+
+The application creates an environment under:
+
+```text
+~/.local/share/edh-dl
+```
+
+It installs the required dependencies once and subsequently transfers only the application code when updates are necessary.
+
+Existing SSH configuration is respected, including aliases, users, ports, keys and ProxyJump settings.
+
+### B. Using the SSH launcher
+
+For environments where you prefer not to run the desktop application, EDH Downloader provides a lightweight SSH launcher.
+
+On macOS, Linux or WSL:
+
+```bash
+ssh me@server '/path/to/edh-dl launcher sh' > edh-connect
+
+chmod +x edh-connect
+
+./edh-connect
+```
+
+You can also specify another SSH destination:
+
+```bash
+./edh-connect other@host
+```
+
+On Windows 10/11:
+
+```powershell
+ssh me@server "/path/to/edh-dl launcher ps1" > edh-connect.ps1
+
+powershell -ExecutionPolicy Bypass -File edh-connect.ps1
+```
+
+The launcher automatically:
+
+- Establishes the SSH tunnel.
+- Starts the remote web interface.
+- Selects available local and remote ports.
+- Transfers a fresh access token through the SSH connection.
+- Opens the application in your browser.
+
+No manual port forwarding is required.
+
+Closing the launcher terminates the connection and remote interface, but **does not terminate running download jobs**.
+
+---
+
+## API Quota Management
+
+Earth Data Hub provides free API access with a monthly allowance of **500,000 requests**.
+
+Each source chunk retrieved counts as one request.
+
+EDH Downloader includes its own quota accounting system to help manage consumption.
+
+Usage is tracked per API key and calendar month in:
+
+```text
+~/.local/share/edh-dl/usage.json
+```
+
+The application:
+
+- Tracks requests across download jobs.
+- Calculates remaining quota based on locally recorded usage.
+- Supports manual calibration against the official quota page.
+- Allows configuring a maximum quota utilization threshold.
+- Can pause jobs or wait for the next monthly reset when the threshold is reached.
+
+The default stopping threshold is 90%.
+
+**Important:** Earth Data Hub does not expose the remaining quota directly to API-key clients. Consequently, the application maintains its own usage records. Requests made by other tools are not automatically accounted for.
+
+You can calibrate usage using the official [Earth Data Hub quota page](https://earthdatahub.destine.eu/).
+
+---
+
+## Command-Line Interface
+
+In addition to the web interface, EDH Downloader provides a CLI for scripting, automation and headless workflows.
+
+### Dataset discovery
+
+List available datasets:
+
+```bash
+edh-dl datasets
+```
+
+Inspect the variables, pressure levels and temporal range of a dataset:
+
+```bash
+edh-dl variables era5-pressure-levels
+```
+
+### Download planning
+
+Create a job specification through the web interface and save it as `job.json`.
+
+Estimate the cost of the operation:
+
+```bash
+edh-dl plan job.json
+```
+
+Optionally benchmark the download using real source chunks:
+
+```bash
+edh-dl plan job.json --sample
+```
+
+This operation uses 12 API requests and asks for confirmation.
+
+### Execute downloads
+
+Start a detached download:
+
+```bash
+edh-dl run job.json --detach
+```
+
+### Job management
+
+The CLI supports the following operations:
+
+```bash
+edh-dl jobs
+
+edh-dl status ID
+
+edh-dl log ID
+
+edh-dl pause ID
+
+edh-dl resume ID
+
+edh-dl resume ID --connections 8
+
+edh-dl cancel ID
+
+edh-dl export ID
+```
+
+### Development and local server
+
+Start the web interface:
+
+```bash
+edh-dl serve
+```
+
+Generate a standalone executable:
+
+```bash
+packaging/build.sh
+```
+
+---
+
+## Output Formats
+
+EDH Downloader supports two complementary storage formats.
+
+### Icechunk
+
+Icechunk is the default storage backend for CLI downloads.
+
+A typical output directory contains:
+
+```text
+output/
+└── dataset.icechunk/
+```
+
+Icechunk provides transactional commits and allows the downloader to process datasets incrementally.
+
+Each completed processing unit is committed independently, making interrupted jobs resumable without repeating completed downloads.
+
+### Zarr v3
+
+The application can also export the resulting dataset into a standard Zarr v3 store:
+
+```text
+output/
+├── dataset.icechunk/
+└── dataset.zarr/
+```
+
+The exported Zarr store can be accessed directly using Xarray.
+
+The export process supports configurable chunking, sharding, compression and data types.
+
+When Zarr export is selected, the temporary Icechunk repository is removed after successful export.
+
+If only Icechunk output is selected, the repository is retained.
+
+### Reading the output with Xarray
 
 ```python
 import xarray as xr
-ds = xr.open_zarr("~/edh-data/era5_subset.zarr")
-# or the Icechunk repository:
-import icechunk
-repo = icechunk.Repository.open(icechunk.local_filesystem_storage("~/edh-data/era5_subset.icechunk"))
-ds = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)
+
+ds = xr.open_zarr("~/edh-data/dataset.zarr")
+
+print(ds)
 ```
 
-Dimensions: `valid_time` (period start for aggregated data), optional level dimension (e.g. `isobaricInhPa`),
-`latitude`/`longitude` (or `point` with `latitude`, `longitude`, `point_name` coordinates). Values are float32,
-lossless by default (optionally bit-rounded, e.g. to the 13 mantissa bits ERA5 has on Earth Data Hub, for smaller files).
-Root attributes `edh_job` / `edh_plan` hold everything that was selected.
+### Reading directly from Icechunk
 
-## Chunking and Zarr encoding
+```python
+import icechunk
+import xarray as xr
 
-The **Output** step compares four chunk layouts with real numbers for your selection (chunk shape and size,
-number of chunks, cost of reading one grid cell's full time series and of reading one map) and recommends one:
-*Time series* for points or small areas over long periods, *Maps* for large areas over few time steps,
-*Automatic* otherwise, or *Custom* sizes.
+storage = icechunk.local_filesystem_storage(
+    "~/edh-data/dataset.icechunk"
+)
 
-The Icechunk repository is always written in the *Automatic* (download-aligned) layout, so each chunk is written
-exactly once and an interrupted job resumes safely; Icechunk keeps old chunk versions, so rewriting long chunks
-unit after unit would multiply its size. The chosen layout, optional **sharding** (chunks grouped into ~512 MB
-shard files, useful when there would be tens of thousands of chunk files), compressor (Blosc+Zstd/LZ4/LZ4HC/zlib,
-Zstd, gzip, none), level, shuffle, data type (float32/float64) and extra global attributes
-are applied to the exported Zarr: a direct byte copy for the Automatic layout, otherwise one local, memory-bounded
-rechunking pass (no extra downloads).
+repo = icechunk.Repository.open(storage)
 
-## How it works
+session = repo.readonly_session("main")
 
-`catalog` reads STAC and the consolidated `zarr.json`; `planner` maps the selection to source chunk indices,
-groups output periods into units aligned with the source time chunks, and spatial tiles into memory-bounded
-groups; `engine` downloads chunks with N async connections into a temporary directory a couple of units ahead (bounded by its
-size and free disk); a processor decodes (bitround/bytes/blosc/zstd codecs), cuts, aggregates and region-writes
-each unit to Icechunk and commits; `store` exports to Zarr; `runner` launches detached workers (`setsid`).
+ds = xr.open_zarr(
+    session.store,
+    consolidated=False
+)
 
-## Notes and limitations
+print(ds)
+```
 
-* Daily sums of accumulated ERA5 variables use the hours whose `valid_time` falls in the day (00–23 UTC, shifted by
-  the UTC offset). ECMWF's own daily totals use 01–24; shift with the offset if you need that convention.
-* Supported layouts: `(time, lat, lon)`, `(time, level, lat, lon)` with level chunk 1, and static `(lat, lon)`
-  arrays in Zarr v3 stores with consolidated metadata (all ERA5 datasets on Earth Data Hub).
-* One job writes to one Icechunk repository; do not run two jobs into the same output.
-* Tests: `uv run pytest` (runs against a local fake Earth Data Hub; uses no quota). Set `EDH_DL_OFFLINE=1` to
-  make the app refuse any uncached metadata fetch (handy for UI work without spending requests).
+### Dataset structure
+
+Depending on the selected dataset and extraction strategy, the output contains:
+
+| Dimension / Coordinate | Description |
+|---|---|
+| `valid_time` | Time coordinate; period start for aggregated data |
+| `latitude` | Latitude coordinate |
+| `longitude` | Longitude coordinate |
+| `isobaricInhPa` | Optional pressure-level dimension |
+| `point` | Optional dimension for point extraction |
+| `point_name` | Optional coordinate identifying extracted points |
+
+Data values are stored as `float32` by default.
+
+The application also records the original selection and processing configuration in the root attributes:
+
+- `edh_job`
+- `edh_plan`
+
+This provides useful provenance information for downstream scientific workflows.
+
+---
+
+## Chunking and Compression
+
+Choosing an appropriate chunk layout is important when working with large multidimensional datasets.
+
+EDH Downloader includes a chunk-layout comparison step that evaluates four strategies:
+
+| Strategy | Recommended use |
+|---|---|
+| Time Series | Point data or small spatial areas over long periods |
+| Maps | Large geographical areas over relatively few time steps |
+| Automatic | General-purpose workloads |
+| Custom | User-defined chunk dimensions |
+
+The comparison includes:
+
+- Chunk dimensions and sizes.
+- Total number of chunks.
+- Estimated cost of reading a complete grid-cell time series.
+- Estimated cost of reading a geographical map.
+
+The Icechunk repository always uses the Automatic download-aligned layout.
+
+This ensures each source-aligned chunk is written only once, avoiding unnecessary rewrites during incremental processing.
+
+The final Zarr export can use a different layout through a local, memory-bounded rechunking operation.
+
+### Supported compression codecs
+
+- Blosc + Zstandard
+- Blosc + LZ4
+- Blosc + LZ4HC
+- Blosc + zlib
+- Zstandard
+- gzip
+- No compression
+
+Additional options include compression levels, shuffle filters, optional sharding and configurable floating-point precision.
+
+---
+
+## Architecture
+
+EDH Downloader is organized around a modular download and processing pipeline.
+
+```text
+                  ┌──────────────────────┐
+                  │    User Interface    │
+                  │      CLI / Web       │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │       Catalog        │
+                  │  STAC + Zarr Metadata│
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │       Planner        │
+                  │ Selection & Chunking │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │        Engine        │
+                  │ Async Chunk Download │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │      Processor       │
+                  │ Decode / Cut /       │
+                  │ Aggregate / Write    │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │       Icechunk       │
+                  │ Transactional Store  │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │        Export        │
+                  │      Zarr v3         │
+                  └──────────────────────┘
+```
+
+### Main components
+
+| Component | Responsibility |
+|---|---|
+| `catalog` | Reads STAC catalogue information and consolidated Zarr metadata. |
+| `planner` | Translates user selections into source chunk indices and processing units. |
+| `engine` | Downloads source chunks asynchronously using configurable parallel connections. |
+| `processor` | Decodes, subsets, aggregates and writes data into Icechunk. |
+| `store` | Handles storage operations and Zarr export. |
+| `runner` | Launches and manages detached background workers. |
+
+The download engine uses bounded temporary storage and prefetches a limited number of processing units ahead of the processor.
+
+This allows large downloads to run without requiring the entire dataset to fit in memory.
+
+---
+
+## Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Python 3.12+ | Core application |
+| [NiceGUI](https://nicegui.io/) | Interactive web interface |
+| [aiohttp](https://docs.aiohttp.org/) | Asynchronous HTTP requests |
+| [AsyncSSH](https://asyncssh.readthedocs.io/) | SSH connections and remote execution |
+| [Icechunk](https://icechunk.io/) | Transactional scientific data storage |
+| [Zarr](https://zarr.dev/) | Chunked multidimensional array storage |
+| [Xarray](https://docs.xarray.dev/) | Multidimensional scientific data |
+| [NumPy](https://numpy.org/) | Numerical operations |
+| [Pandas](https://pandas.pydata.org/) | Tabular data operations |
+| [Numcodecs](https://numcodecs.readthedocs.io/) | Compression and encoding |
+| [uv](https://docs.astral.sh/uv/) | Dependency and environment management |
+| [PyInstaller](https://pyinstaller.org/) | Standalone executable packaging |
+| [pytest](https://docs.pytest.org/) | Automated testing |
+
+---
+
+## Testing
+
+The project includes automated tests using a local mock Earth Data Hub implementation.
+
+Run the test suite with:
+
+```bash
+uv run pytest
+```
+
+Tests do not consume Earth Data Hub API quota.
+
+For offline development, set:
+
+```bash
+export EDH_DL_OFFLINE=1
+```
+
+This prevents the application from performing uncached metadata requests, making it useful when developing the interface without accessing the remote catalogue.
+
+---
+
+## Notes and Limitations
+
+- Supported Zarr layouts include `(time, lat, lon)`, `(time, level, lat, lon)` with a level chunk size of 1, and static `(lat, lon)` arrays.
+- One download job writes to one Icechunk repository. Do not run multiple jobs targeting the same output repository.
+- Daily sums of accumulated ERA5 variables use the observations whose `valid_time` falls within the selected day. This corresponds to hours 00–23 UTC, adjusted for the configured UTC offset. ECMWF daily totals conventionally use hours 01–24, so an appropriate offset should be applied when reproducing that convention.
+- API quota tracking is maintained locally and cannot automatically account for requests made by external applications.
+- The desktop application requires SSH access to remote servers. The remote environment requires Python 3.12 or newer, with `uv` used when available or `python3 -m venv` as a fallback.
+
+---
+
+## Credits and Acknowledgements
+
+EDH Downloader builds upon the open scientific data ecosystem and the infrastructure provided by:
+
+- **[Earth Data Hub](https://earthdatahub.destine.eu/)** — data access, catalogue services and underlying meteorological datasets.
+- **[Zarr](https://zarr.dev/)** — scalable storage for multidimensional scientific data.
+- **[Icechunk](https://icechunk.io/)** — transactional storage and versioning for chunked scientific datasets.
+- **[Xarray](https://xarray.dev/)** — tools for working with labelled multidimensional arrays.
+
+The project is independently developed and is not an official Earth Data Hub application.
+
+## License
+
+This project is distributed under the **Apache License 2.0**.
+
+See [LICENSE](LICENSE) for the full license text.
+
+---
+
+<div align="center">
+
+**Built for efficient access to large-scale Earth data.**
+
+If you find EDH Downloader useful, consider giving the project a ⭐ on GitHub.
+
+[Repository](https://github.com/MaatVO/EarthDH-Downloder) · [Issues](https://github.com/MaatVO/EarthDH-Downloder/issues) · [Releases](https://github.com/MaatVO/EarthDH-Downloder/releases)
+
+</div>
