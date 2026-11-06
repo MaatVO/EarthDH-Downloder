@@ -39,7 +39,8 @@ are running. The server only does the work: keys, quota, downloads, jobs and fil
   running, here or on the servers, and show up in **Jobs** again when you reconnect.
 
 Executables are per platform (`packaging/build.sh` builds for the machine it runs on; the GitHub workflow in
-`.github/workflows/build.yml` builds Linux, macOS and Windows once the repository has a remote). Without an
+`.github/workflows/build.yml` builds Linux, macOS and Windows on every push to `main` and publishes them under
+[Releases](../../releases), versioned `v<major>.<minor>.<run number>`; the major.minor comes from `pyproject.toml`). Without an
 executable for your computer: `uv tool install /path/to/edh-downloader` (any OS), then `edh-dl`.
 
 **Without the app, only ssh** (no manual port forwarding either). Get the launcher once, with ssh, then just run it: it opens the SSH tunnel, starts the UI on the server and

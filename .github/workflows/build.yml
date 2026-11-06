@@ -1,22 +1,70 @@
-# Executables for the three platforms: the server needs the Linux one; your computer needs its own
-# (to run `edh-dl` as the SSH client app). Runs on tags and by hand once the repository has a GitHub remote.
-name: build
+# On every push to main: build the standalone executable (packaging/build.sh) on Linux, macOS and Windows,
+# then publish them as a new GitHub release. Version = <major>.<minor> from pyproject.toml + the run number,
+# e.g. pyproject 0.2.0 -> v0.2.17. Bump major/minor in pyproject.toml to start a new series.
+name: build-release
 on:
-  workflow_dispatch:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  version:
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          base=$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([0-9]+)\.([0-9]+)\..*/\1.\2/')
+          echo "tag=v${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     strategy:
+      fail-fast: true
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-2022]
+        include:
+          - { os: ubuntu-22.04, name: linux-x86_64, exe: edh-dl }
+          - { os: macos-14, name: macos-arm64, exe: edh-dl }
+          - { os: windows-2022, name: windows-x86_64, exe: edh-dl.exe }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: bash packaging/build.sh
         shell: bash
+      - name: Name the asset
+        shell: bash
+        run: |
+          ext="${{ matrix.exe }}"; ext="${ext#edh-dl}"
+          cp "dist/${{ matrix.exe }}" "edh-dl-${{ needs.version.outputs.tag }}-${{ matrix.name }}${ext}"
       - uses: actions/upload-artifact@v4
         with:
-          name: edh-dl-${{ runner.os }}-${{ runner.arch }}
-          path: dist/edh-dl*
+          name: edh-dl-${{ matrix.name }}
+          path: edh-dl-${{ needs.version.outputs.tag }}-*
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.version.outputs.tag }}" assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "${{ needs.version.outputs.tag }}" \
+            --generate-notes
