@@ -26,11 +26,11 @@ jobs:
   build:
     needs: version
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - { os: ubuntu-22.04, name: linux-x86_64, exe: edh-dl }
-          - { os: macos-14, name: macos-arm64, exe: edh-dl }
+          - { os: macos-latest, name: macos-arm64, exe: edh-dl }
           - { os: windows-2022, name: windows-x86_64, exe: edh-dl.exe }
     runs-on: ${{ matrix.os }}
     steps:
@@ -51,6 +51,8 @@ jobs:
 
   release:
     needs: [version, build]
+    # publish whatever platforms built, even if one failed
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
