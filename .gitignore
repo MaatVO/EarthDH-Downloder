@@ -19,3 +19,4 @@ secrets.*
 credentials*
 servers.json
 keys.json
+src/edh_downloader/_version.py

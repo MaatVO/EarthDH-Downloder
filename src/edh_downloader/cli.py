@@ -24,7 +24,9 @@ def main(argv=None):
     from . import __version__
 
     ap.add_argument("--version", action="version", version=f"edh-dl {__version__}")
+    ap.add_argument("--no-update", action="store_true", help="do not check for a newer release at start")
     sub = ap.add_subparsers(dest="cmd")
+    sub.add_parser("update", help="check for a newer release and install it (packaged executable only)")
     x = sub.add_parser("app", help="on your computer: connect to a server over SSH and use it from here "
                                    "(the default when run without a command)")
     x.add_argument("--port", type=int, default=0); x.add_argument("--no-browser", action="store_true")
@@ -74,7 +76,19 @@ def main(argv=None):
     sub.add_parser("agent", help=argparse.SUPPRESS)  # used by the app over SSH
     a = ap.parse_args(argv)
 
+    if a.cmd == "update":
+        from . import update
+
+        if not update.can_self_update():
+            sys.exit("self-update works only in the packaged executable (from source: git pull / reinstall)")
+        if update.check_and_update(force_notice=True):
+            print("updated; run edh-dl again")
+        return
     if a.cmd in (None, "app"):
+        if not a.no_update:
+            from . import update
+
+            update.auto_update(sys.argv[1:] if argv is None else list(argv))
         from .gui.connect import serve_local
 
         return serve_local(getattr(a, "port", 0), open_browser=not getattr(a, "no_browser", False))

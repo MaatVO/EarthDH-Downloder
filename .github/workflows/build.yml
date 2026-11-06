@@ -16,12 +16,14 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - id: v
         run: |
           base=$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([0-9]+)\.([0-9]+)\..*/\1.\2/')
           echo "tag=v${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "version=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: version
@@ -38,11 +40,16 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: bash packaging/build.sh
         shell: bash
+        env:
+          EDH_DL_VERSION: ${{ needs.version.outputs.version }}
       - name: Name the asset
         shell: bash
         run: |
           ext="${{ matrix.exe }}"; ext="${ext#edh-dl}"
-          cp "dist/${{ matrix.exe }}" "edh-dl-${{ needs.version.outputs.tag }}-${{ matrix.name }}${ext}"
+          out="edh-dl-${{ needs.version.outputs.tag }}-${{ matrix.name }}${ext}"
+          cp "dist/${{ matrix.exe }}" "$out"
+          # checksum file the app's self-updater verifies the download against
+          uv run python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest(), sys.argv[1])" "$out" > "$out.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: edh-dl-${{ matrix.name }}

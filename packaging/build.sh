@@ -4,6 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 uv sync --dev
+# CI passes the release number (e.g. 0.2.7); the app shows it and compares it with the latest release to self-update.
+if [ -n "${EDH_DL_VERSION:-}" ]; then
+  printf '__version__ = "%s"\n' "$EDH_DL_VERSION" > src/edh_downloader/_version.py
+fi
 uv run python -m edh_downloader.bundle packaging/agent.zip
 uv run pyinstaller --noconfirm --clean --onefile --name edh-dl \
   --collect-all nicegui --collect-all icechunk --collect-all numcodecs --collect-all zarr \
