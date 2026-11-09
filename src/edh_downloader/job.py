@@ -4,7 +4,7 @@ The GUI only builds this; the engine only reads it. A job file can be created on
 another (``edh-dl run job.json``). It never contains the API key itself, only the key's name.
 """
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from .util import read_json
@@ -26,12 +26,11 @@ COMPRESSORS = {
     "gzip": "gzip (most compatible, slow)",
     "none": "No compression",
 }
-CHUNK_LAYOUTS = {
-    "auto": "Automatic (balanced)",
-    "timeseries": "Time series: long in time, small in space",
-    "maps": "Maps: whole area, few time steps",
-    "custom": "Custom sizes",
-}
+
+
+def _make(cls, d: dict | None, **over):
+    known = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in (d or {}).items() if k in known and k not in over}, **over)
 
 
 @dataclass
@@ -87,6 +86,9 @@ class OutputSpec:
     shard_space: int | None = None  # chunks per shard along each spatial dimension
     consolidated: bool = True  # write consolidated metadata in the exported Zarr
     extra_attrs: dict = field(default_factory=dict)  # added to the global attributes
+    target_mode: str = "create"  # "create" or "extend"
+    target_store: str | None = None  # path to existing .icechunk (or companion .zarr)
+    extend_direction: str = "forward"  # "forward" (after) or "backward" (before)
 
 
 @dataclass
@@ -119,12 +121,14 @@ class JobSpec:
 
     @classmethod
     def from_dict(cls, d: dict) -> "JobSpec":
+        """Unknown fields are ignored and missing ones take their default: a job written by another version of
+        the app (older or newer) still loads."""
         d = dict(d)
-        t = TimeSpec(**d.pop("time", {}))
-        a = dict(d.pop("area", {}))
-        a["points"] = [Point(**p) for p in a.get("points", [])]
-        return cls(time=t, area=AreaSpec(**a), output=OutputSpec(**d.pop("output", {})),
-                   download=DownloadSpec(**d.pop("download", {})), **d)
+        t = _make(TimeSpec, d.pop("time", None))
+        a = dict(d.pop("area", None) or {})
+        a["points"] = [_make(Point, p) for p in a.get("points") or []]
+        return _make(cls, d, time=t, area=_make(AreaSpec, a), output=_make(OutputSpec, d.pop("output", None)),
+                     download=_make(DownloadSpec, d.pop("download", None)))
 
     @classmethod
     def load(cls, path: str | Path) -> "JobSpec":
@@ -139,8 +143,16 @@ class JobSpec:
 
     @property
     def icechunk_path(self) -> Path:
+        if self.output.target_mode == "extend" and self.output.target_store:
+            p = Path(self.output.target_store).expanduser()
+            if p.suffix == ".zarr" and p.with_suffix(".icechunk").exists():
+                return p.with_suffix(".icechunk")
+            return p if p.suffix == ".icechunk" else p.with_suffix(".icechunk")
         return self.output_dir / f"{self.output.name}.icechunk"
 
     @property
     def zarr_path(self) -> Path:
+        if self.output.target_mode == "extend" and self.output.target_store:
+            p = Path(self.output.target_store).expanduser()
+            return p if p.suffix == ".zarr" else p.with_suffix(".zarr")
         return self.output_dir / f"{self.output.name}.zarr"

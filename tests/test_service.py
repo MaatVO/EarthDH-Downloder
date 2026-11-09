@@ -27,6 +27,10 @@ def test_plan_and_jobs_through_the_backend(home, fake_edh):
         except backend.BackendError:
             pass
 
+        # Inspect non-existent path
+        r_miss = await be.call("store_inspect", path=str(home / "nonexistent.icechunk"))
+        assert r_miss["ok"] is False
+
     asyncio.run(go())
 
 

@@ -22,6 +22,7 @@ def times(fake):
 
 def test_hourly_bbox_exact(home, fake_edh):
     s = spec(fake_edh, home / "out", area=AreaSpec("bbox", west=-60, east=60, south=-40, north=50))
+    first = len(fake_edh.requests)
     job = create_job(s)
     assert run_foreground(job) == "completed"
     ds = xr.open_zarr(s.zarr_path, consolidated=True)
@@ -37,7 +38,7 @@ def test_hourly_bbox_exact(home, fake_edh):
     assert str(ds.valid_time.values[0])[:13] == "2019-11-10T00"
     assert ds.attrs["edh_status"] == "complete"
     # one request per needed chunk (+ metadata), nothing twice
-    chunk_reqs = [p for p in fake_edh.requests if "/t2m/c/" in p]
+    chunk_reqs = [p for p in fake_edh.requests[first:] if "/t2m/c/" in p]
     assert len(chunk_reqs) == len(set(chunk_reqs))
     assert quota.used(keys.get_key("test").fingerprint) > 0
 
@@ -170,3 +171,61 @@ def test_recommendations(home, fake_edh):
     rows = chunking.analyze(Plan(short, ds))
     assert {r["layout"] for r in rows} == {"auto", "timeseries", "maps", "custom"}
     assert next(r for r in rows if r["layout"] == "auto")["export"] == "direct copy"
+
+
+def test_extend_time_series_forward_and_backward(home, fake_edh):
+    from edh_downloader import store
+
+    # 1. Base job: 2019-11-15 to 2019-11-19
+    s1 = spec(fake_edh, home / "out", time=TimeSpec("2019-11-15", "2019-11-19", "none"),
+              area=AreaSpec("bbox", west=-30, east=30, south=-20, north=20),
+              output=OutputSpec(directory=str(home / "out"), name="ext_test", keep_icechunk=True, export_zarr=True))
+    j1 = create_job(s1)
+    assert run_foreground(j1) == "completed"
+
+    # Inspect store
+    info = store.inspect_icechunk_for_extend(s1.icechunk_path)
+    assert info["ok"] is True
+    assert info["time_len"] == 5 * 24
+
+    # Also test inspection of companion zarr
+    info_zarr = store.inspect_icechunk_for_extend(s1.zarr_path)
+    assert info_zarr["ok"] is True
+
+    # 2. Extend Forward (append): 2019-11-20 to 2019-11-24
+    s2 = spec(fake_edh, home / "out", time=TimeSpec("2019-11-20", "2019-11-24", "none"),
+              area=AreaSpec("bbox", west=-30, east=30, south=-20, north=20),
+              output=OutputSpec(directory=str(home / "out"), name="ext_test",
+                                target_mode="extend", target_store=str(s1.icechunk_path),
+                                extend_direction="forward", keep_icechunk=True, export_zarr=True))
+    j2 = create_job(s2)
+    assert run_foreground(j2) == "completed"
+
+    ds2 = xr.open_zarr(s1.zarr_path)
+    assert len(ds2.valid_time) == 10 * 24
+    assert str(ds2.valid_time.values[0])[:10] == "2019-11-15"
+    assert str(ds2.valid_time.values[-1])[:10] == "2019-11-24"
+
+    # 3. Extend Backward (prepend): 2019-11-10 to 2019-11-14
+    s3 = spec(fake_edh, home / "out", time=TimeSpec("2019-11-10", "2019-11-14", "none"),
+              area=AreaSpec("bbox", west=-30, east=30, south=-20, north=20),
+              output=OutputSpec(directory=str(home / "out"), name="ext_test",
+                                target_mode="extend", target_store=str(s1.icechunk_path),
+                                extend_direction="backward", keep_icechunk=True, export_zarr=True))
+    j3 = create_job(s3)
+    assert run_foreground(j3) == "completed"
+
+    ds3 = xr.open_zarr(s1.zarr_path)
+    assert len(ds3.valid_time) == 15 * 24
+    assert str(ds3.valid_time.values[0])[:10] == "2019-11-10"
+    assert str(ds3.valid_time.values[-1])[:10] == "2019-11-24"
+
+    # Verify data matches fake_edh over the whole 15 days
+    tt = times(fake_edh)
+    i = np.where((tt >= "2019-11-10") & (tt < "2019-11-25"))[0]
+    lat_i = np.where((fake_edh.lat >= -20) & (fake_edh.lat <= 20))[0]
+    lon180 = (fake_edh.lon + 180) % 360 - 180
+    lon_i = np.where((lon180 >= -30) & (lon180 <= 30))[0]
+    lon_i = lon_i[np.argsort(lon180[lon_i])]
+    expect = fake_edh.data["t2m"][i][:, lat_i][:, :, lon_i]
+    np.testing.assert_array_equal(ds3.t2m.values, expect)

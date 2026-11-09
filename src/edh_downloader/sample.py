@@ -30,6 +30,32 @@ MAX_SAMPLES_PER_VAR = 4  # decoded chunks kept per variable for the size estimat
 MAX_CONNECTIONS = 32
 
 
+RAW_TTL = 2 * 86400  # sampled chunks a job may reuse instead of downloading them again (recent data can be revised)
+
+
+def raw_path(chunk_url: str):
+    """Where the sample keeps the bytes of a chunk it downloaded (``.miss`` suffix: absent on the server)."""
+    return cache_dir() / "samples" / "raw" / hashlib.sha256(chunk_url.encode()).hexdigest()
+
+
+def _keep_raw(chunk_url: str, data: bytes | None) -> None:
+    p = raw_path(chunk_url)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in p.parent.iterdir():  # expire what no job picked up
+        try:
+            if now - old.stat().st_mtime > RAW_TTL:
+                old.unlink()
+        except OSError:
+            pass
+    if data is None:
+        p.with_suffix(".miss").touch()
+    else:
+        tmp = p.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(p)
+
+
 def _key(ds_url: str) -> str:
     return hashlib.sha256(ds_url.encode()).hexdigest()[:16]
 
@@ -73,7 +99,12 @@ async def run(plan, secret: str, counter, n: int = DEFAULT_REQUESTS, progress=No
         async def one(c):
             vp = plan.vars[c[1]]
             t = time.perf_counter()
-            data = await client.get(vp.chunk_url(plan.ds.url, c[2], c[3], c[4], c[5]))
+            url = vp.chunk_url(plan.ds.url, c[2], c[3], c[4], c[5])
+            data = await client.get(url)
+            try:
+                _keep_raw(url, data)  # the job will use it instead of paying the request again
+            except OSError:
+                pass
             got.append((c, data, time.perf_counter() - t))
             if progress:
                 progress(len(got), len(chunks))

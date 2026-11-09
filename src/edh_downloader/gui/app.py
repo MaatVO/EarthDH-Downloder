@@ -4,10 +4,12 @@ The UI only builds job specs and controls jobs; downloads run in detached worker
 browser, stopping ``serve`` or dropping the SSH connection does not affect them.
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 import asyncio
+import html
 import json
 import math
+import re
 import secrets
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,15 +22,168 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .. import __version__, chunking
 from ..backend import BackendError, Local
 from ..runner import ACTIVE
+from ..quota import next_reset
 from ..job import COMPRESSORS, FREQS, STATS, AreaSpec, DownloadSpec, JobSpec, OutputSpec, Point, TimeSpec
 from ..util import human_bytes, human_duration
 from . import structure
 from .auth import TokenMiddleware
 from .theme import PINK, apply_theme
 
-STATUS_COLOR = {"running": "primary", "starting": "primary", "exporting": "info", "completed": "positive",
-                "failed": "negative", "interrupted": "warning", "paused": "grey-6", "paused_quota": "warning",
-                "waiting_quota": "warning", "cancelled": "grey-6", "created": "grey-6"}
+STRUCT_KEYS = ("id", "status", "alive", "error", "outputs", "outputs_exist", "spec")
+STATUS_COLOR = {"running": "positive", "starting": "positive", "exporting": "positive", "completed": "positive",
+                "failed": "negative", "interrupted": "negative", "unreadable": "negative", "paused": "grey-6",
+                "paused_quota": "warning", "waiting_quota": "warning", "cancelled": "grey-6", "created": "grey-6"}
+# Jobs list order and summary line: (singular, plural, statuses), most urgent first
+JOB_GROUPS = (("needs attention", "need attention", {"failed", "interrupted", "unreadable"}),
+              ("running", "running", {"starting", "running", "exporting"}),
+              ("waiting for quota", "waiting for quota", {"waiting_quota", "paused_quota"}),
+              ("stopped", "stopped", {"paused", "created", "cancelled"}),
+              ("completed", "completed", {"completed"}))
+JOB_GROUP_STOPPED = 3  # where a status the groups don't know is counted
+STATUS_ICON = {"starting": "hourglass_top", "running": "downloading", "exporting": "output", "completed": "check_circle",
+               "failed": "error", "interrupted": "report", "unreadable": "help", "paused": "pause_circle",
+               "paused_quota": "pause_circle", "waiting_quota": "schedule", "cancelled": "cancel",
+               "created": "radio_button_unchecked"}
+
+
+def job_group(status: str | None) -> int:
+    return next((i for i, g in enumerate(JOB_GROUPS) if status in g[2]), JOB_GROUP_STOPPED)
+
+
+def job_rollup_html(jobs: list[dict]) -> str:
+    """The line above the jobs list. Built only from counts and the fixed labels above."""
+    counts = [0] * len(JOB_GROUPS)
+    for j in jobs:
+        counts[job_group(j.get("status"))] += 1
+    parts = []
+    for i, (one, many, _) in enumerate(JOB_GROUPS):
+        if counts[i]:
+            text = f"{counts[i]} {one if counts[i] == 1 else many}"
+            parts.append(f'<span class="text-negative text-weight-medium">{text}</span>' if i == 0 else text)
+    return '<span class="edh-muted"> · </span>'.join(parts)
+
+
+def job_percent(done: int, total: int) -> str:
+    """Rounded down, so an unfinished job never reads 100%."""
+    return "100%" if done >= total else f"{math.floor(1000 * done / total) / 10:.1f}%"
+
+
+STATUS_LABEL = {"waiting_quota": "Waiting for quota", "paused_quota": "Paused at quota limit"}
+
+
+def job_status_label(status: str) -> str:
+    return STATUS_LABEL.get(status, status.replace("_", " ").capitalize())
+
+
+def time_ago(iso: str | None) -> str | None:
+    """How long since a UTC timestamp ("4m", "2d 4h"); None if unknown. Coarse, so the card redraws rarely."""
+    try:
+        seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(iso)).total_seconds()
+    except (TypeError, ValueError):
+        return None
+    if seconds < 60:
+        return "under a minute"
+    return f"{int(seconds // 60)}m" if seconds < 3600 else human_duration(seconds)
+
+
+def job_error_text(error: str) -> str:
+    """The problem and the way out for failures we can name; anything else is shown as it is, never guessed at.
+    The raw text is always in the job's log."""
+    low = error.lower()
+    if "no space left" in low or "errno 28" in low or "gb free on disk" in low:
+        m = re.search(r"'(/[^']+)'|cannot write (/\S+):", error)
+        where = f" at {Path(m[1] or m[2]).parent}" if m else ""
+        return f"Not enough free disk space{where}. Free some space, then Resume."
+    if "api key rejected" in low:
+        return "Earth Data Hub rejected the API key. Check the key in the Keys tab, then Resume."
+    if "http 403" in low:
+        return ("Earth Data Hub refused access, possibly because the quota for this key is used up. "
+                "Check the quota page, then Resume.")
+    if "http 404" in low:
+        return "Earth Data Hub could not find part of this dataset (HTTP 404). The Log shows the address."
+    if "giving up on" in low:
+        return "Could not reach Earth Data Hub after repeated attempts. Check the network connection, then Resume."
+    if "permission denied" in low or "errno 13" in low:
+        return "No permission to write to the output or temporary folder. Fix its permissions, then Resume."
+    return re.sub(r"^Fatal:\s*", "", error)
+
+
+def job_note(s: dict, done: int, total: int) -> str:
+    """What happened to a stopped job and what to do next. Running jobs report through their own progress message."""
+    st = s.get("status")
+    committed = f"{done:,} of {total:,} units are committed and safe." if done and total else "No units were committed."
+    resume = "Resume continues from there." if done else "Resume starts it from the beginning."
+    if st == "interrupted":
+        when = f" Last activity {s['_ago']} ago." if s.get("_ago") else ""
+        return f"Stopped unexpectedly.{when} {committed} {resume}"
+    if st == "failed":
+        text = job_error_text(s.get("error") or "The job stopped because of an error. The Log has the details.")
+        return f"{text} {committed}" + ("" if "Resume" in text else f" {resume}")
+    if st in ("paused", "cancelled"):
+        return f"{committed} {resume}"
+    if st == "paused_quota":
+        return f"Reached the monthly quota limit. Resume after the monthly reset. {committed}"
+    if st == "waiting_quota":
+        return "Reached the monthly quota limit. The job continues by itself after the reset."
+    if st == "unreadable":
+        return s.get("error") or ""
+    return ""
+
+
+def job_forecast(s: dict) -> tuple[str, str]:
+    """A running job's (headline after the status, sentence under the bar), honest about the monthly quota."""
+    eta, rate = s.get("eta_s"), s.get("req_rate")
+    if not eta or not rate:
+        return "", ""
+    left, used, limit = s.get("requests_left"), s.get("month_used"), s.get("month_limit")
+    plain = f"about {human_duration(eta)} left"
+    if left is None or used is None or not limit or left <= limit - used:
+        return plain, ""
+    room = max(0, limit - used)
+    when = f"in about {human_duration(room / rate)}" if room / rate >= 60 else "soon"
+    reset = next_reset()
+    waits = ((s.get("spec") or {}).get("download") or {}).get("wait_for_quota", True)
+    months = math.ceil((left - room) / limit)
+    then = (f"then waits for the reset on {reset.day} {reset:%b} and continues" if waits else
+            f"then pauses until you resume it after the reset on {reset.day} {reset:%b}")
+    plural = "s" if months != 1 else ""
+    return (f"reaches quota limit {when}",
+            f"At the current speed this job reaches the monthly quota limit {when}, {then}. "
+            f"It needs about {months} monthly reset{plural} to finish.")
+
+
+def job_resume_cost(s: dict) -> tuple[str, bool]:
+    """What resuming a stopped job will spend, and whether that is more than this month has left."""
+    total = s.get("requests_total")
+    if not total:
+        return "", False
+    left = max(0, total - (s.get("requests_job") or 0))
+    room = (s.get("_quota") or {}).get("left")
+    if room is None:
+        return f"Resuming needs about {left:,} more requests.", False
+    if left <= room:
+        return f"Resuming needs about {left:,} more requests. {room:,} are left this month by this app's count.", False
+    waits = ((s.get("spec") or {}).get("download") or {}).get("wait_for_quota", True)
+    then = "The job will wait for the monthly reset." if waits else "The job will pause at the limit."
+    return f"Resuming needs about {left:,} more requests, but only {room:,} are left this month by this app's count. {then}", True
+
+
+def jobs_stale_html(ago: str | None) -> str:
+    """Shown in place of the summary line when the list can't be refreshed. ``ago`` comes from time_ago."""
+    when = f" Last update {ago} ago." if ago else ""
+    return f'<span class="text-warning">Cannot refresh the job list.{when} The numbers below may be out of date. Retrying.</span>'
+
+
+def open_snippet(path: str) -> str:
+    """Python that opens a finished output."""
+    p = json.dumps(path, ensure_ascii=False)
+    if path.endswith(".zarr"):
+        return f"import xarray as xr\n\nds = xr.open_zarr({p})"
+    return ("import icechunk\nimport xarray as xr\n\n"
+            f"storage = icechunk.local_filesystem_storage({p})\n"
+            "repo = icechunk.Repository.open(storage)\n"
+            'ds = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)')
+
 SAMPLE_REQUESTS = 12  # requests of one "measure on a sample" (service.sample.DEFAULT_REQUESTS)
 PRESETS = {
     "Europe": (-25.0, 34.0, 45.0, 72.0),
@@ -74,16 +229,69 @@ def parse_attrs(text: str) -> dict:
 
 
 @contextmanager
-def section(n, title: str, subtitle: str = "", wide: bool = False):
+def section(n, title: str, subtitle: str = "", wide: bool = False, icon: str | None = None):
     with ui.card().classes("edh-card w-full min-w-0" + (" col-span-2 max-xl:col-span-1" if wide else "")):
-        with ui.row().classes("items-center gap-3 no-wrap w-full"):
+        with ui.row().classes("items-center gap-2 no-wrap w-full"):
             ui.html(f'<div class="edh-step">{n}</div>', sanitize=False)
+            if icon:
+                ui.icon(icon, size="20px").classes("edh-muted")
             with ui.column().classes("gap-0"):
                 ui.label(title).classes("edh-title")
                 if subtitle:
                     ui.label(subtitle).classes("edh-muted text-body2")
         with ui.column().classes("w-full gap-3 pt-1"):
             yield
+
+
+class IconToggle(ui.toggle):
+    """A segmented toggle whose segments carry an icon: ``options`` maps value -> (label, icon)."""
+
+    def __init__(self, options: dict[str, tuple[str, str]], **kwargs):
+        self._icons = [icon for _, icon in options.values()]
+        super().__init__({value: label for value, (label, _) in options.items()}, **kwargs)
+
+    def _update_options(self) -> None:
+        super()._update_options()
+        self._props["options"] = [{**o, "icon": i} for o, i in zip(self._props["options"], self._icons)]
+
+
+def dataset_image(url: str | None, alt: str, size: str):
+    """A dataset's catalogue image in a tonal well, with a globe when it has none or it cannot be loaded."""
+    with ui.element("div").classes(f"edh-thumb {size}"):
+        if not url:
+            ui.icon("public", size="20px")
+            return
+        img = ui.image(url).props("no-spinner no-transition fit=contain")
+        img.props(f'alt="{alt.replace(chr(34), "")}"')
+        with img.add_slot("error"):
+            with ui.element("div").classes("absolute-full flex flex-center"):
+                ui.icon("public", size="20px")
+
+
+OPTION_SEPARATOR = "  ·  "  # dataset labels are "title  ·  id"; the option row shows them on two lines
+
+
+def option_template(urls: list[str | None]) -> str:
+    """Quasar option row with a catalogue image. NiceGUI numbers options, so ``urls`` follows the option order."""
+    sources = html.escape(json.dumps(urls))
+    sep = html.escape(json.dumps(OPTION_SEPARATOR))
+    return f"""
+      <q-item v-bind="props.itemProps">
+        <q-item-section side>
+          <div class="edh-thumb edh-thumb-sm">
+            <template v-for="src in [{sources}[props.opt.value]]" :key="src">
+              <img v-if="src" :src="src" alt="" loading="lazy" @error="$event.target.style.visibility = 'hidden'">
+              <q-icon v-else name="public" size="20px" />
+            </template>
+          </div>
+        </q-item-section>
+        <q-item-section class="edh-option-text">
+          <q-item-label>{{{{ props.opt.label.split({sep})[0] }}}}</q-item-label>
+          <q-item-label v-if="props.opt.label.split({sep})[1]" caption class="edh-mono">
+            {{{{ props.opt.label.split({sep})[1] }}}}
+          </q-item-label>
+        </q-item-section>
+      </q-item>"""
 
 
 def tip(text: str):
@@ -125,9 +333,6 @@ def structure_badges(d: dict):
     ui.label(" · ".join((_n(len(d["data"]), "variable"), f"{human_bytes(d['raw'])} raw",
                          f"{'' if d.get('measured') else '≈ '}{human_bytes(d['disk'])} on disk",
                          _n(d["files"], "file")))).classes("edh-muted text-caption")
-    return
-    for txt in ():
-        pass
 
 
 def structure_panel(d: dict, state: dict, max_vars: int | None = MAX_VARS, see_all=None, sticky=False):
@@ -173,7 +378,7 @@ def structure_dialog(host, d: dict, title: str):
                 ui.label(title).classes("edh-title edh-mono")
                 with ui.row().classes("items-center gap-2"):
                     structure_badges(d)
-            ui.button(icon="close", on_click=dlg.close).props("flat round")
+            ui.button(icon="close", on_click=dlg.close).props('flat round aria-label="Close"')
         with ui.scroll_area().classes("w-full h-[72vh]"):
             structure_panel(d, {}, max_vars=None, sticky=True)
     dlg.on("hide", lambda: dlg.delete())
@@ -186,12 +391,15 @@ def build_page(be, local: bool = False):
     """The whole UI for one backend ``be`` (this computer or a server over SSH): it never touches keys, datasets,
     jobs or files itself, only asks ``be`` (see service.py)."""
     apply_theme()
+    # a failure in any handler must not break the page: say so and carry on
+    ui.on_exception(lambda e: ui.notify(f"Something went wrong: {type(e).__name__}: {e}", type="negative"))
     f = {  # form model
         "collection": "era5", "dataset": "era5-single-levels-atmosphere", "variables": [], "levels": [],
         "start": "2020-01-01", "end": "2020-01-31", "start_hour": 0, "end_hour": 23, "freq": "none", "hours": 6, "tz_offset": 0, "stats": {},
         "mode": "bbox", "west": 10.3, "south": 45.6, "east": 12.6, "north": 47.1, "points": "",
         "lon_convention": "-180..180",
         "directory": be.info["default_dir"], "name": "era5_subset", "out_format": "icechunk",
+        "target_mode": "create", "target_store": "", "extend_direction": "forward",
         "lossless": True, "keepbits": 13,
         "chunk_layout": None,  # None = follow the recommendation
         "chunk_time": None, "chunk_lat": None, "chunk_lon": None, "chunk_points": None,
@@ -200,33 +408,39 @@ def build_page(be, local: bool = False):
         "key": None, "connections": 8, "spool_dir": "", "max_spool_gb": 20.0, "min_free_gb": 10.0,
         "quota_safety": 0.9, "wait_for_quota": True, "memory_gb": 16.0,
     }
-    ctx = {"keys": {"default": None, "keys": []}, "plan_seq": 0, "ds": None, "info": None, "plan": None, "plan_task": None, "rec": ("auto", "")}
+    ctx = {"keys": {"default": None, "keys": []}, "plan_seq": 0, "ds": None, "info": None, "plan": None, "plan_task": None, "rec": ("auto", ""),
+           "thumbs": {}, "thumbs_asked": set()}  # thumbs: collection -> dataset id -> image URL
 
     # ================================================================ header
-    with ui.header().classes("edh-header items-center justify-between px-6 py-2"):
+    with ui.header().classes("edh-header items-center justify-between px-3 sm:px-6 py-2"):
         with ui.row().classes("items-center gap-3 no-wrap"):
             ui.html('<div class="edh-logo"><span class="material-icons">public</span></div>', sanitize=False)
             with ui.column().classes("gap-0"):
-                ui.label("EDH Downloader").classes("edh-brand")
-                ui.label(f"Earth Data Hub datasets → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption")
+                ui.label("EDH Downloader").classes("edh-brand").props("role=heading aria-level=1")
+                ui.label(f"Earth Data Hub datasets → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
         with ui.tabs().props("no-caps dense indicator-color=transparent active-class=edh-tab-active"
                              ).classes("edh-tabs") as tabs:
             t_new = ui.tab("New job", icon="add_circle_outline")
             t_jobs = ui.tab("Jobs", icon="dns")
             t_keys = ui.tab("Keys", icon="vpn_key")
-        with ui.row().classes("items-center gap-3 no-wrap"):
-            with ui.column().classes("gap-1 items-end"):
+        with ui.row().classes("items-center gap-3 no-wrap max-sm:w-full"):
+            with ui.column().classes("gap-1 items-end min-w-0 max-sm:grow"):
                 with ui.row().classes("items-center gap-1 no-wrap"):
                     quota_label = ui.label().classes("text-caption")
-                    with ui.link(target=QUOTA_URL, new_tab=True).classes("edh-quota-link"):
+                    quota_label.on("click", lambda: tabs.set_value(t_keys) if not f.get("key") else None)
+                    with ui.link(target=QUOTA_URL, new_tab=True).classes("edh-quota-link").props(
+                            'aria-label="Open the Earth Data Hub quota page"'):
                         ui.icon("open_in_new", size="14px")
                         ui.tooltip("Your real usage is on the Earth Data Hub quota page: the app only counts its "
                                    "own requests. Enter the number there in Keys → Calibrate.").classes("edh-tooltip")
-                quota_bar = ui.linear_progress(value=0, show_value=False).props("size=6px").classes("edh-grad-bar w-48")
+                quota_bar = ui.linear_progress(value=0, show_value=False).props(
+                    'size=6px aria-label="Monthly quota used"').classes("edh-grad-bar w-48 max-w-full")
             key_select = ui.select({}, label="API key").props("dense outlined options-dense").classes("w-40")
 
     def later(fn, delay=0.01):
         ui.timer(delay, fn, once=True)
+
+    missing_key_banner = None
 
     async def call(method, **kw):
         """Ask the backend; a failure becomes a notification and ``None``."""
@@ -254,9 +468,15 @@ def build_page(be, local: bool = False):
         except BackendError:
             k = None
         if not k:
-            quota_label.text = "no API key: add one in Keys"
+            quota_label.text = "⚠️ no API key: add one in Keys"
+            quota_label.classes(replace="text-caption text-amber-400 font-medium cursor-pointer")
             quota_bar.value = 0
+            if missing_key_banner:
+                missing_key_banner.set_visibility(True)
             return
+        quota_label.classes(replace="text-caption")
+        if missing_key_banner:
+            missing_key_banner.set_visibility(False)
         q = k["usage"]
         pct = q["used"] / k["quota"] if k["quota"] else 0
         quota_label.text = f"quota {q['used']:,} / {k['quota']:,} · resets {q['resets'][:10]}"
@@ -269,21 +489,47 @@ def build_page(be, local: bool = False):
     with ui.tab_panels(tabs, value=t_new).classes("edh-panels w-full"):
         # ================================================================ NEW JOB
         with ui.tab_panel(t_new).classes("px-0"):
+            missing_key_banner = ui.card().classes(
+                "w-full bg-amber-950/30 border border-amber-500/60 p-4 mb-5 rounded-xl shadow-lg"
+            )
+            with missing_key_banner:
+                with ui.row().classes("w-full items-center justify-between gap-4 no-wrap max-md:flex-wrap"):
+                    with ui.row().classes("items-center gap-3 no-wrap"):
+                        ui.icon("vpn_key", color="warning", size="36px")
+                        with ui.column().classes("gap-0"):
+                            ui.label("Earth Data Hub API Key Required").classes("text-body1 text-weight-bold text-amber-300")
+                            ui.label(
+                                "An API key is required to inspect dataset variables, calculate request quotas, and download data."
+                            ).classes("text-caption text-amber-100/80")
+                    with ui.row().classes("items-center gap-2 no-wrap"):
+                        ui.button("Get API Key ↗", on_click=lambda: ui.navigate.to(QUOTA_URL, new_tab=True)).props(
+                            "outline no-caps color=warning size=sm"
+                        )
+                        ui.button("Configure in Keys", icon="vpn_key", on_click=lambda: tabs.set_value(t_keys)).props(
+                            "unelevated no-caps color=warning size=sm"
+                        ).classes("text-black font-semibold")
+            missing_key_banner.set_visibility(False)
+
             with ui.row().classes("w-full no-wrap items-start gap-5 max-lg:flex-wrap"):
                 with ui.element("div").classes("grid grid-cols-2 max-xl:grid-cols-1 gap-5 grow min-w-0 content-start"):
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- dataset
-                        with section(1, "Dataset"):
-                            with ui.row().classes("w-full items-center gap-3 no-wrap"):
-                                coll_select = ui.select({"era5": "ERA5"}, value="era5", label="Collection").classes("w-56")
-                                ds_select = ui.select({}, label="Dataset", with_input=True).classes("grow")
+                        with section(1, "Dataset", icon="dataset"):
+                            with ui.row().classes("w-full items-center gap-3 no-wrap max-sm:flex-wrap"):
+                                coll_select = ui.select({"era5": "ERA5"}, value="era5", label="Collection").classes("w-48")
+                                ds_select = ui.select({}, label="Dataset", with_input=True).classes(
+                                    "grow min-w-0 max-sm:order-last max-sm:basis-full")
                                 ui.button(icon="refresh", on_click=lambda: load_dataset(refresh=True)).props(
                                     "flat round").tooltip("reload the structure from Earth Data Hub (a few requests)")
+                            with ui.row().classes("w-full items-start gap-4 no-wrap max-sm:flex-wrap"):
+                                ds_image = ui.element("div")
+                                with ui.column().classes("gap-1 grow min-w-0"):
+                                    ds_title = ui.label().classes("edh-subtitle")
+                                    ds_chips = ui.row().classes("gap-2")
                             ds_info = ui.markdown().classes("text-body2 edh-muted")
-                            ds_chips = ui.row().classes("gap-2")
 
                         # ---------- variables
-                        with section(2, "Variables and levels"):
+                        with section(2, "Variables and levels", icon="layers"):
                             with ui.row().classes("w-full items-center justify-between"):
                                 var_search = ui.input(placeholder="Search variables…").props("dense outlined clearable").classes("w-80")
                                 with var_search.add_slot("prepend"):
@@ -306,7 +552,7 @@ def build_page(be, local: bool = False):
 
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- time
-                        with section(3, "Time"):
+                        with section(3, "Time", icon="date_range"):
                             with ui.row().classes("items-center gap-4"):
                                 for key_, label, hkey in (("start", "First day", "start_hour"), ("end", "Last day", "end_hour")):
                                     with ui.input(label).bind_value(f, key_).classes("w-44") as inp:
@@ -342,9 +588,10 @@ def build_page(be, local: bool = False):
                             stats_box = ui.column().classes("gap-2")
 
                         # ---------- area
-                        with section(4, "Area"):
+                        with section(4, "Area", icon="map"):
                             with ui.row().classes("items-center gap-5"):
-                                ui.toggle({"global": "Global", "bbox": "Box", "points": "Points"}).bind_value(
+                                IconToggle({"global": ("Global", "public"), "bbox": ("Box", "crop_free"),
+                                            "points": ("Points", "place")}).bind_value(
                                     f, "mode").props("unelevated toggle-color=primary no-caps").classes("edh-toggle")
                                 with_tip(ui.select({"-180..180": "−180 … 180", "0..360": "0 … 360"},
                                                    label="Output longitudes").bind_value(f, "lon_convention").classes("w-48"),
@@ -352,7 +599,8 @@ def build_page(be, local: bool = False):
                                          "centred on Greenwich (usual for Europe/Africa). 0…360: ERA5's native order, "
                                          "centred on the Pacific; use it for boxes crossing the 180° meridian so "
                                          "longitudes stay increasing.")
-                            with ui.row().classes("w-full items-stretch gap-5 no-wrap max-md:flex-wrap"):
+                            # wraps: when the card is too narrow for both, the map goes full width under the inputs
+                            with ui.row().classes("w-full items-stretch gap-5"):
                                 with ui.column().classes("gap-3 w-60 shrink-0") as bbox_box:
                                     with ui.grid(columns=2).classes("gap-3 w-full"):
                                         ui.number("North", min=-90, max=90, format="%.2f").bind_value(f, "north")
@@ -373,7 +621,7 @@ def build_page(be, local: bool = False):
                                 draw = {"draw": {"rectangle": {"shapeOptions": {"color": PINK}}, "polyline": False,
                                                  "polygon": False, "circle": False, "marker": False, "circlemarker": False},
                                         "edit": {"edit": False, "remove": False}}
-                                with ui.element("div").classes("relative grow h-72 min-w-[14rem]"):
+                                with ui.element("div").classes("relative grow basis-72 h-72 min-w-0"):
                                     area_map = ui.leaflet(center=(46.0, 11.0), zoom=4, draw_control=draw,
                                                           hide_drawn_items=True).classes("edh-map w-full h-full")
                                     ui.button("Center", icon="center_focus_strong", on_click=lambda: center_map()).props(
@@ -385,8 +633,16 @@ def build_page(be, local: bool = False):
                                     "attribution": "&copy; OpenStreetMap contributors", "maxZoom": 19})
 
                     # ---------- output
-                    with section(5, "Output", wide=True):
-                        with ui.row().classes("w-full items-center gap-4 no-wrap max-md:flex-wrap"):
+                    with section(5, "Output", wide=True, icon="folder"):
+                        with ui.row().classes("w-full items-center justify-between pb-2 mb-2 border-b border-white/10"):
+                            with ui.row().classes("items-center gap-2"):
+                                ui.label("Store mode").classes("text-body2 text-weight-medium")
+                                tip("Create a brand-new dataset or extend an existing Icechunk dataset forward or backward in time.")
+                            IconToggle({"create": ("New store", "create_new_folder"),
+                                        "extend": ("Extend existing Icechunk", "more_time")}).bind_value(
+                                f, "target_mode").props("no-caps unelevated toggle-color=primary").classes("edh-toggle")
+
+                        with ui.row().classes("w-full items-center gap-4 no-wrap max-md:flex-wrap") as new_store_row:
                             ui.input("Directory (on the server)").bind_value(f, "directory").classes("grow")
                             ui.input("Name").bind_value(f, "name").classes("w-64")
                             with_tip(ui.select({"zarr": "Zarr", "both": "Zarr + Icechunk", "icechunk": "Icechunk only"},
@@ -395,6 +651,22 @@ def build_page(be, local: bool = False):
                                      "resumable. Zarr: export a plain Zarr v3 at the end and delete the repository. "
                                      "Zarr + Icechunk: keep both (the repository has the commit history). Icechunk "
                                      "only: skip the export.")
+
+                        with ui.column().classes("w-full gap-3") as extend_store_box:
+                            with ui.row().classes("w-full items-center gap-3 no-wrap max-md:flex-wrap"):
+                                ui.input("Existing store path (.icechunk or companion .zarr)").bind_value(
+                                    f, "target_store").classes("grow")
+                                ui.button("Inspect store", icon="search", on_click=lambda: later(inspect_target)).props("outline no-caps")
+                            with ui.row().classes("w-full items-center gap-4"):
+                                ui.label("Extension direction:").classes("text-caption text-weight-medium")
+                                ui.radio({"forward": "Forward (After / Future)", "backward": "Backward (Before / Past)"}).bind_value(
+                                    f, "extend_direction").props("inline")
+                            extend_msg = ui.markdown().classes("text-caption edh-muted")
+                            extend_alert = ui.card().classes("w-full bg-red-950/40 border border-red-500/50 p-3 rounded text-red-200 text-caption")
+                            extend_alert.set_visibility(False)
+
+                        new_store_row.bind_visibility_from(f, "target_mode", lambda v: v == "create")
+                        extend_store_box.bind_visibility_from(f, "target_mode", lambda v: v == "extend")
                         out_paths = ui.label().classes("edh-mono text-caption edh-muted")
 
                         # -- dataset structure: drawing + tree, updated live
@@ -530,6 +802,9 @@ def build_page(be, local: bool = False):
 
         # ================================================================ JOBS
         with ui.tab_panel(t_jobs).classes("px-0"):
+            ui.label("Jobs").classes("sr-only").props("role=heading aria-level=2")
+            jobs_rollup = ui.html("", sanitize=False).classes("text-body2 pb-3")
+            jobs_announce = ui.label("").classes("sr-only").props("role=status aria-live=polite")
             jobs_box = ui.column().classes("w-full gap-4")
 
         # ================================================================ KEYS
@@ -540,6 +815,7 @@ def build_page(be, local: bool = False):
     async def load_collections():
         try:
             cols = await be.call("collections")
+            coll_select.add_slot("option", option_template([c.get("thumbnail") for c in cols]))
             coll_select.set_options({c["id"]: c["title"] for c in cols},
                                     value=f["collection"] if f["collection"] in {c["id"] for c in cols} else "era5")
         except Exception as e:
@@ -553,19 +829,34 @@ def build_page(be, local: bool = False):
             ui.notify(f"could not list datasets: {e}", type="negative")
             return
         ctx["items"] = {i["id"]: i for i in items}
-        ds_select.options = {i["id"]: f"{i['title']}  ·  {i['id']}" for i in items if not i.get("deprecated")}
+        ctx["thumbs"][f["collection"]] = {i["id"]: i.get("thumbnail") for i in items}
+        offered = [i for i in items if not i.get("deprecated")]
+        ds_select.add_slot("option", option_template([i.get("thumbnail") for i in offered]))
+        ds_select.options = {i["id"]: f"{i['title']}{OPTION_SEPARATOR}{i['id']}" for i in offered}
         if f["dataset"] not in ds_select.options and ds_select.options:
             f["dataset"] = next(iter(ds_select.options))
         ds_select.value = f["dataset"]
         ds_select.update()
         await load_dataset()
 
+    def show_dataset(info):
+        """The chosen dataset's image and name, which come from the catalogue and need no API key."""
+        ds_image.clear()
+        with ds_image:
+            dataset_image(info.get("thumbnail"), f"Preview of {info.get('title', info['id'])}", "edh-thumb-lg")
+        ds_title.text = info.get("title", info["id"])
+        ds_chips.clear()
+
     async def load_dataset(refresh=False):
         info = ctx.get("items", {}).get(f["dataset"])
         if not info:
             return
+        show_dataset(info)
         if not f["key"]:
-            ds_info.content = "**Add an API key** in the Keys tab to read the dataset structure."
+            ds_info.content = (
+                "**Earth Data Hub API key required**: configure an API key in the **Keys** tab "
+                "to inspect dataset variables and calculate download plans."
+            )
             return
         ds_info.content = "_loading dataset structure…_"
         try:
@@ -578,7 +869,7 @@ def build_page(be, local: bool = False):
         s = ds["summary"]
         t = s["time"] or ["—", "—"]
         ds_info.content = info.get("abstract", "")[:420]
-        ds_chips.clear()
+        ds_chips.clear()  # again: two loads can overlap across the await above
         with ds_chips:
             parts = [f"{t[0][:10]} to {t[1][:10]}", f"step {s['time_step']}", f"grid {s['grid'][0]}×{s['grid'][1]}",
                      f"{s['variables']} variables", info.get("size", "?")]
@@ -623,11 +914,6 @@ def build_page(be, local: bool = False):
                 "edh-mono" if f["variables"] else "edh-muted")
         render_stats()
         schedule_plan()
-
-    def drop_var(n):
-        var_table.selected = [r for r in var_table.selected if r["name"] != n]
-        var_table.update()
-        on_vars_changed()
 
     var_table.on("selection", lambda e: on_vars_changed())
     level_select.on_value_change(lambda e: (f.update(levels=e.value or []), schedule_plan()))
@@ -731,6 +1017,65 @@ def build_page(be, local: bool = False):
     area_map.on("draw:created", on_draw)
 
     # ------------------------------------------------------------------ spec + plan
+    async def inspect_target():
+        p = (f.get("target_store") or "").strip()
+        extend_alert.set_visibility(False)
+        extend_msg.content = ""
+        if not p:
+            extend_msg.content = "_Enter a path to an existing .icechunk store (or companion .zarr)._"
+            return
+        res = await call("store_inspect", path=p)
+        if not res or not res.get("ok"):
+            err = res.get("error", "could not inspect store") if res else "error inspecting store"
+            extend_alert.clear()
+            with extend_alert:
+                ui.label(err).classes("text-caption")
+            extend_alert.set_visibility(True)
+            return
+        job = res.get("job") or {}
+        t_start = res["time_start"]
+        t_end = res["time_end"]
+        n_steps = res["time_len"]
+        step_s = res.get("step_seconds", 3600)
+        extend_msg.content = (
+            f"**Existing Icechunk dataset found**: `{res['icechunk_path']}`\n\n"
+            f"• **Time coverage**: `{t_start[:16]}` to `{t_end[:16]}` ({n_steps:,} steps)\n\n"
+            f"• **Variables**: {', '.join(res.get('variables', []))}"
+        )
+        if job.get("dataset"):
+            f["dataset"] = job["dataset"]
+            if job["dataset"] in ds_select.options:
+                ds_select.value = job["dataset"]
+        if job.get("variables"):
+            f["variables"] = list(job["variables"])
+        if job.get("levels"):
+            f["levels"] = list(job["levels"])
+        t_spec = job.get("time") or {}
+        if t_spec.get("freq"):
+            f["freq"] = t_spec["freq"]
+        if t_spec.get("hours"):
+            f["hours"] = t_spec["hours"]
+        if t_spec.get("tz_offset") is not None:
+            f["tz_offset"] = t_spec["tz_offset"]
+        a_spec = job.get("area") or {}
+        if a_spec.get("mode"):
+            f["mode"] = a_spec["mode"]
+            for k_ in ("west", "south", "east", "north"):
+                if k_ in a_spec:
+                    f[k_] = a_spec[k_]
+
+        import pandas as pd
+        if f.get("extend_direction") == "forward":
+            next_start = pd.to_datetime(t_end) + pd.Timedelta(seconds=step_s)
+            f["start"] = next_start.strftime("%Y-%m-%d")
+            f["start_hour"] = next_start.hour
+        elif f.get("extend_direction") == "backward":
+            prev_end = pd.to_datetime(t_start) - pd.Timedelta(seconds=step_s)
+            f["end"] = prev_end.strftime("%Y-%m-%d")
+            f["end_hour"] = prev_end.hour
+
+        later(schedule_plan)
+
     def layout_choice() -> str:
         if f["out_format"] == "icechunk":
             return "auto"
@@ -753,6 +1098,9 @@ def build_page(be, local: bool = False):
             output=OutputSpec(
                 directory=f["directory"], name=f["name"], export_zarr=f["out_format"] != "icechunk",
                 keep_icechunk=f["out_format"] != "zarr",
+                target_mode=f.get("target_mode", "create"),
+                target_store=f.get("target_store") or None,
+                extend_direction=f.get("extend_direction", "forward"),
                 keepbits=None if f["lossless"] else int(f["keepbits"] or 13),
                 chunk_layout=layout_choice(),
                 chunk_time=_int(f["chunk_time"]) if custom else None,
@@ -780,6 +1128,14 @@ def build_page(be, local: bool = False):
         seq = ctx["plan_seq"]
         summary.clear()
         with summary:
+            if not f.get("key"):
+                ui.label("⚠️ Earth Data Hub API key required. Add your key in the Keys tab to view request cost and plan downloads.").classes("text-amber-400 font-medium")
+                launch_btn.disable()
+                return
+            if f.get("target_mode") == "extend" and not (f.get("target_store") or "").strip():
+                ui.label("Enter an existing Icechunk store path in Output to extend.").classes("edh-muted")
+                launch_btn.disable()
+                return
             if not ds:
                 ui.label("Select a dataset to see the plan.").classes("edh-muted")
                 launch_btn.disable()
@@ -808,7 +1164,12 @@ def build_page(be, local: bool = False):
         render_summary(res)
         render_chunking(res)
         render_encoding(res)
-        out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
+        if f.get("target_mode") == "extend":
+            tgt = f.get("target_store") or ""
+            direction = f.get("extend_direction", "forward")
+            out_paths.text = f"→ Extending ({direction}) in {tgt}"
+        else:
+            out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
         launch_btn.enable()
 
     def render_summary(plan):
@@ -929,6 +1290,12 @@ def build_page(be, local: bool = False):
     ui.timer(1.0, lambda: _watch_form(f, ctx, schedule_plan, render_stats, draw_rect))
 
     async def launch():
+        if not f.get("key"):
+            ui.notify("Please configure an API key in the Keys tab first", type="warning")
+            return
+        if f.get("target_mode") == "extend" and not (f.get("target_store") or "").strip():
+            ui.notify("Please enter an existing Icechunk store path to extend", type="warning")
+            return
         if not ctx["plan"]:
             return
         try:
@@ -1025,17 +1392,60 @@ def build_page(be, local: bool = False):
     cards: dict = {}  # job id -> (signature, card)
     open_struct: set = set()  # completed jobs whose structure is shown
     struct_states: dict = {}  # job id -> {"var": ..., "src": ...}
+    job_states: dict = {}  # job id -> last status, to announce changes
+
+    async def load_thumbs(collection):
+        """Images for job cards; a card without one just shows the globe, so a failure here is not reported."""
+        try:
+            items = await be.call("datasets", collection=collection)
+        except Exception:
+            return
+        ctx["thumbs"][collection] = {i["id"]: i.get("thumbnail") for i in items}
 
     async def refresh_jobs():
-        jobs = await call("jobs_list")
-        if jobs is None:
+        try:
+            jobs = await be.call("jobs_list")
+        except BackendError:  # polled every 3 s: say so once, in place, not with a toast each time
+            jobs_rollup.set_content(jobs_stale_html(time_ago(ctx.get("jobs_seen"))))
+            jobs_rollup.set_visibility(True)
             return
+        ctx["jobs_seen"] = datetime.now(timezone.utc).isoformat()
+        changed = [f"{s_['id']}: {job_status_label(s_.get('status', '?'))}" for s_ in jobs
+                   if s_["id"] in job_states and job_states[s_["id"]] != s_.get("status")]
+        job_states.clear()
+        job_states.update({s_["id"]: s_.get("status") for s_ in jobs})
+        if changed:
+            jobs_announce.set_text(". ".join(changed))
+        balances: dict = {}  # API key -> status, read once per refresh
+        for s_ in jobs:
+            if s_.get("alive") or s_.get("status") in ("completed", "unreadable") or not s_.get("spec"):
+                continue
+            dl = s_["spec"].get("download") or {}
+            name = dl.get("key")
+            if name not in balances:
+                try:
+                    balances[name] = await be.call("key_status", name=name)
+                except BackendError:
+                    balances[name] = None
+            if k := balances[name]:
+                s_["_quota"] = {"left": max(0, int(k["quota"] * dl.get("quota_safety", 0.9)) - k["usage"]["used"])}
         for s_ in jobs:  # read the stores off the event loop (cached)
             if s_["id"] in open_struct and (src := _struct_src(s_)):
                 try:
                     s_["_struct"] = await be.call("store_structure", path=src)
                 except BackendError as e:  # shown in the card
                     s_["_struct_err"] = str(e)
+        for s_ in jobs:
+            s_["_ago"] = time_ago(s_.get("finished_at") if s_.get("status") == "completed" else s_.get("updated_at"))
+            if spec_ := s_.get("spec"):
+                coll = spec_.get("collection", "era5")
+                s_["_thumb"] = ctx["thumbs"].get(coll, {}).get(spec_.get("dataset"))
+                if coll not in ctx["thumbs"] and coll not in ctx["thumbs_asked"]:  # off the refresh: may be slow
+                    ctx["thumbs_asked"].add(coll)
+                    later(lambda c=coll: load_thumbs(c))
+        jobs.sort(key=lambda s_: job_group(s_.get("status")))  # stable: newest first within each group
+        jobs_rollup.set_content(job_rollup_html(jobs))
+        jobs_rollup.set_visibility(bool(jobs))
         ids = [s_["id"] for s_ in jobs]
         if ids != list(cards) or not jobs:
             jobs_box.clear()
@@ -1046,16 +1456,25 @@ def build_page(be, local: bool = False):
                         ui.icon("inbox", size="xl", color="grey-6")
                         ui.label("No jobs yet. Create one in New job.").classes("edh-muted")
                 for s_ in jobs:
-                    cards[s_["id"]] = (None, ui.card().classes("edh-card w-full"))
+                    cards[s_["id"]] = (None, ui.card().classes("edh-card w-full"), None, None)
         for s_ in jobs:
-            sig = json.dumps({k: v for k, v in s_.items() if k != "_struct"}, sort_keys=True, default=str) + \
+            # structure (buttons, inputs) is rebuilt only when it changes; live numbers are redrawn in place, so
+            # what the user is typing (e.g. connections) survives the refresh
+            sig = json.dumps({k: s_.get(k) for k in (*STRUCT_KEYS, "_thumb")}, sort_keys=True, default=str) + \
                 str(s_["id"] in open_struct) + json.dumps(struct_states.get(s_["id"], {}).get("src"))
-            old, card = cards[s_["id"]]
+            live_sig = json.dumps({k: v for k, v in s_.items() if k != "_struct"}, sort_keys=True, default=str)
+            old, card = cards[s_["id"]][:2]
             if sig != old or "_struct" in s_ and old is None:
                 card.clear()
                 with card:
-                    _job_card(s_)
-                cards[s_["id"]] = (sig, card)
+                    live = _job_card(s_)
+                cards[s_["id"]] = (sig, card, live, live_sig)
+            elif live_sig != cards[s_["id"]][3]:
+                live = cards[s_["id"]][2]
+                live.clear()
+                with live:
+                    _job_live(s_)
+                cards[s_["id"]] = (sig, card, live, live_sig)
 
     def _struct_src(s_):
         outs = s_.get("outputs_exist") or []
@@ -1072,66 +1491,147 @@ def build_page(be, local: bool = False):
         struct_states.setdefault(jid, {})["src"] = src
         ui.timer(0.01, refresh_jobs, once=True)
 
-    def _job_card(s):
+    def _job_live(s):
         st = s.get("status", "?")
-        spec = s.get("spec", {})
         total = s.get("units_total") or 0
         done = len(s.get("units_done", []))
-        if True:
-            with ui.row().classes("w-full items-center justify-between no-wrap"):
-                with ui.column().classes("gap-0 min-w-0"):
-                    ui.label(s["id"]).classes("text-subtitle1 edh-mono")
-                    tt = spec.get("time", {})
-                    ui.label(f"{spec.get('dataset')} · {', '.join(spec.get('variables', []))} · {tt.get('start')} → "
-                             f"{tt.get('end')} · {FREQS.get(tt.get('freq'), tt.get('freq'))}").classes("edh-muted text-caption")
-                ui.label(st.replace("_", " ").capitalize()).classes(f"text-weight-medium text-{STATUS_COLOR.get(st, 'grey-6')}")
-            ui.linear_progress(value=done / total if total else 0, show_value=False).props(
-                "size=8px").classes("edh-grad-bar")
-            with ui.row().classes("w-full gap-3 items-stretch"):
-                kpi("Units", f"{done}/{total}")
+        color = STATUS_COLOR.get(st, "grey-6")
+        tail, forecast = job_forecast(s) if st == "running" else ("", "")
+        with ui.row().classes("w-full items-baseline justify-between no-wrap gap-4"):
+            with ui.row().classes("items-baseline gap-x-2 gap-y-0 min-w-0"):
+                ui.icon(STATUS_ICON.get(st, "help"), size="22px").classes(f"text-{color} self-center")
+                ui.label(job_status_label(st)).classes(f"edh-kpi-value text-{color}")
+                if tail:
+                    ui.label(tail).classes("edh-kpi-value")
+            if total:
+                ui.label(job_percent(done, total)).classes("edh-subtitle edh-tabular shrink-0")
+        ui.linear_progress(value=done / total if total else 0, show_value=False).props(
+            f'size=8px aria-label="Job progress" aria-valuetext="{job_percent(done, total) if total else "unknown"}"'
+        ).classes(f"edh-grad-bar edh-bar-{color}")
+        note = job_note(s, done, total) or forecast
+        if note:
+            ui.label(note).classes("text-body2 max-w-prose")
+        if not s.get("alive") and st not in ("completed", "unreadable"):
+            cost, short = job_resume_cost(s)
+            if cost:
+                ui.label(cost).classes("text-caption max-w-prose " + ("text-warning" if short else "edh-muted"))
+        with ui.row().classes("w-full gap-3 items-center pt-1"):
+            with ui.element("div").classes("edh-job-tiles"):  # fixed slots: a value sits in the same place on every card
+                kpi("Units", f"{done:,}/{total:,}")
                 req_total = s.get("requests_total")
                 req_done = ((s.get("requests_job", 0) or 0) + (s.get("requests_run", 0) or 0)
                             if st in ACTIVE else s.get("requests_job", 0) or 0)
                 if req_total:
                     kpi("Requests", f"{req_done:,}", f"of {req_total:,}")
-                if st in ACTIVE:
+                if st == "waiting_quota":
+                    r = next_reset()
+                    kpi("Resumes", f"{r.day} {r:%b}", f"after {r:%H:%M} UTC")
+                elif st in ACTIVE:
                     kpi("Speed", f"{human_bytes(s.get('rate_bps') or 0)}/s", f"{s.get('req_rate') or 0:.1f} req/s")
-                    kpi("ETA", human_duration(s.get("eta_s")))
-                    kpi("Temporary", human_bytes(s.get("spool_bytes") or 0))
-                ui.label(s.get("message") or "").classes("edh-muted text-caption grow self-center")
-            if s.get("error"):
-                ui.label(s["error"]).classes("text-negative text-caption")
+                    kpi("Temporary files", human_bytes(s.get("spool_bytes") or 0))
+                if st == "completed":
+                    if s.get("output_bytes"):
+                        kpi("Output size", human_bytes(s["output_bytes"]))
+                    if s.get("_ago"):
+                        kpi("Finished", f"{s['_ago']} ago", s["finished_at"][:16].replace("T", " ") + " UTC")
+            caption = ("Estimate at the current speed." if tail and not forecast else
+                       s.get("message") or "" if st == "exporting" else "")
+            if caption:
+                ui.label(caption).classes("edh-muted text-caption grow min-w-0")
+
+    def _job_outputs(s):
+        """A finished output, with the code that opens it; only the paths for anything else."""
+        exist = s.get("outputs_exist") or []
+        main = next((o for o in exist if o.endswith(".zarr")), exist[0] if exist else None)
+        if s.get("status") != "completed" or main is None:
+            ui.label("  ·  ".join(s["outputs"])).classes("edh-mono text-caption edh-muted")
+            return
+        snippet = open_snippet(main)
+        with ui.element("div").classes("edh-code w-full"):
+            ui.label(snippet).classes("edh-code-text grow min-w-0")
+            ui.button(icon="content_copy", on_click=lambda t=snippet: (
+                ui.clipboard.write(t), ui.notify("Code copied", type="positive"))).props(
+                'flat round dense color=grey-5 aria-label="Copy code"').tooltip("Copy code")
+        others = [o for o in s["outputs"] if o != main]
+        if others:
+            ui.label("Also saved: " + "  ·  ".join(others)).classes("edh-mono text-caption edh-muted")
+
+    def _connections_menu(s, d, spec):
+        """Rarely changed, so kept out of the card until asked for."""
+        with ui.button("Connections", icon="tune").props("flat no-caps"):
+            with ui.menu().classes("edh-menu") as menu:
+                with ui.row().classes("items-center gap-2 no-wrap p-3"):
+                    conn = ui.number("Parallel connections",
+                                     value=s.get("connections") or spec.get("download", {}).get("connections"),
+                                     min=1, max=64).props("dense outlined").classes("w-44")
+
+                    async def apply():
+                        menu.close()
+                        await act("job_connections", "connections updated", jid=d,
+                                  n=max(1, min(64, int(conn.value or 1))))
+
+                    ui.button("Apply", on_click=apply).props("flat no-caps")
+
+    def _job_card(s):
+        """The card; returns its live part (progress, numbers), which refreshes on its own."""
+        st = s.get("status", "?")
+        spec = s.get("spec", {})
+        if True:
+            with ui.row().classes("w-full items-center gap-3 no-wrap min-w-0"):
+                if spec:
+                    dataset_image(s.get("_thumb"), "", "edh-thumb-md")  # the caption beside it names the dataset
+                with ui.column().classes("grow gap-0 min-w-0"):
+                    ui.label(s["id"]).classes("text-subtitle1 edh-mono break-all").props("role=heading aria-level=3")
+                    tt = spec.get("time") or {}
+                    if spec:
+                        ui.label(f"{spec.get('dataset')} · {', '.join(spec.get('variables') or [])} · "
+                                 f"{tt.get('start')} → {tt.get('end')}"
+                                 + ("" if tt.get("freq") in (None, "none") else f" · {FREQS.get(tt['freq'], tt['freq'])}")
+                                 ).classes("edh-muted text-caption")
+                    else:
+                        ui.label("job definition unreadable").classes("edh-muted text-caption")
+            live = ui.column().classes("w-full gap-2")
+            with live:
+                _job_live(s)
             if s.get("outputs"):
-                ui.label("  ·  ".join(s["outputs"])).classes("edh-mono text-caption edh-muted")
-            with ui.row().classes("gap-2 items-center"):
-                d = s["id"]
-                if s.get("alive"):
-                    conn = ui.number("Connections", value=s.get("connections") or spec.get("download", {}).get("connections"),
-                                     min=1, max=64).props("dense outlined").classes("w-32")
-                    ui.button("Apply", on_click=lambda c=conn, d=d: act(
-                        "job_connections", "connections updated", jid=d, n=int(c.value))).props("flat no-caps")
-                    ui.button("Pause", icon="pause", on_click=lambda d=d: act(
-                        "job_stop", "pausing after the current unit", jid=d, action="pause")).props(
-                        "outline no-caps color=white")
-                    ui.button("Cancel", icon="stop", on_click=lambda d=d: confirm(
-                        "Cancel this job? Downloaded units stay in the Icechunk repository.",
-                        lambda d=d: act("job_stop", "cancelling", jid=d, action="cancel"))).props("flat no-caps color=negative")
-                elif st != "completed":
-                    ui.button("Resume", icon="play_arrow", on_click=lambda d=d: _resume(d)).props(
-                        "unelevated no-caps").classes("edh-grad-btn")
-                src = _struct_src(s)
-                if src:
-                    shown = s["id"] in open_struct
-                    ui.button("Structure", icon="account_tree", on_click=lambda j=s["id"]: toggle_struct(j)).props(
-                        f"{'unelevated color=primary' if shown else 'flat'} no-caps")
-                ui.button("Log", icon="article", on_click=lambda d=d: show_log(d)).props("flat no-caps")
-                ui.button("Clone", icon="content_copy", on_click=lambda sp=spec: clone(sp)).props("flat no-caps")
-                if not s.get("alive"):
-                    ui.button(icon="delete_outline", on_click=lambda d=d: confirm(
-                        "Delete the job record and its temporary files? Outputs are kept.",
-                        lambda d=d: act("job_delete", None, jid=d))).props("flat round color=grey-6")
+                _job_outputs(s)
+            d = s["id"]
+            src = _struct_src(s)
+            with ui.row().classes("edh-job-actions w-full gap-2 items-center justify-between"):
+                with ui.row().classes("gap-2 items-center"):  # what this state calls for
+                    if s.get("alive"):
+                        ui.button("Pause", icon="pause", on_click=lambda d=d: act(
+                            "job_stop", "pausing after the current unit", jid=d, action="pause")).props(
+                            "flat no-caps color=white")
+                        ui.button("Cancel", icon="stop", on_click=lambda d=d: confirm(
+                            f"Cancel {d}? Committed units stay in the Icechunk repository, and you can resume this job later.",
+                            lambda d=d: act("job_stop", "cancelling", jid=d, action="cancel"),
+                            yes="Cancel job", no="Keep running", danger=True)).props("flat no-caps color=negative")
+                    elif st not in ("completed", "unreadable"):
+                        resume = ui.button("Resume", icon="play_arrow", on_click=lambda d=d: _resume(d))
+                        if st == "failed":  # the note says what to fix first; retrying is not the loudest thing here
+                            resume.props("outline no-caps color=primary")
+                        else:
+                            resume.props("unelevated no-caps").classes("edh-grad-btn")
+                    if src:
+                        shown = s["id"] in open_struct
+                        ui.button("Structure", icon="account_tree", on_click=lambda j=s["id"]: toggle_struct(j)).props(
+                            f"{'unelevated color=primary' if shown else 'outline color=primary'} no-caps")
+                with ui.row().classes("gap-2 items-center"):  # always here, in the same place
+                    if s.get("alive") and st != "waiting_quota":
+                        _connections_menu(s, d, spec)
+                    if not s.get("alive"):
+                        ui.button(icon="delete_outline", on_click=lambda d=d: confirm(
+                            f"Delete the record of {d} and its temporary files? Outputs are kept.",
+                            lambda d=d: act("job_delete", None, jid=d),
+                            yes="Delete record", no="Keep record", danger=True)).props(
+                            'flat round color=grey-6 aria-label="Delete record"').tooltip("Delete record")
+                    if spec:
+                        ui.button("Clone", icon="content_copy", on_click=lambda sp=spec: clone(sp)).props("flat no-caps")
+                    ui.button("Log", icon="article", on_click=lambda d=d: show_log(d)).props("flat no-caps")
             if src and s["id"] in open_struct:
                 _job_structure(s, src)
+        return live
 
     def _job_structure(s, src):
         jid = s["id"]
@@ -1147,7 +1647,8 @@ def build_page(be, local: bool = False):
                 if "_struct" in s:
                     with ui.row().classes("items-center gap-2"):
                         structure_badges(s["_struct"])
-            ui.label(src).classes("edh-mono text-caption edh-muted")
+            if len(outs) > 1:
+                ui.label(src).classes("edh-mono text-caption edh-muted")
             if "_struct_err" in s:
                 ui.label(f"Cannot read the store: {s['_struct_err']}").classes("text-negative text-caption")
             elif "_struct" in s:
@@ -1157,7 +1658,7 @@ def build_page(be, local: bool = False):
             else:
                 ui.spinner(size="md")
 
-    async def act(method, msg=None, then=None, **kw):
+    async def act(method, msg=None, **kw):
         """One backend request from a button; notify the outcome and refresh the jobs list."""
         if await call(method, **kw) is not None and msg:
             ui.notify(msg, type="positive")
@@ -1166,26 +1667,30 @@ def build_page(be, local: bool = False):
     def _resume(d):
         return act("job_resume", "job resumed", jid=d)
 
-    def confirm(text, action):
-        with dialog_host, ui.dialog() as dlg, ui.card().classes("edh-card"):
-            ui.label(text)
+    def confirm(text, action, yes="Yes", no="No", danger=False):
+        with dialog_host, ui.dialog() as dlg, ui.card().classes("edh-card").style("width:min(480px,94vw)"):
+            ui.label(text).classes("break-words w-full")
 
-            async def yes():
+            async def go():
                 dlg.close()
                 r = action()
                 if asyncio.iscoroutine(r):
                     await r
 
             with ui.row().classes("justify-end w-full gap-2"):
-                ui.button("No", on_click=dlg.close).props("flat no-caps")
-                ui.button("Yes", on_click=lambda: yes()).props("unelevated no-caps").classes("edh-grad-btn")
+                ui.button(no, on_click=dlg.close).props("flat no-caps autofocus")
+                btn = ui.button(yes, on_click=lambda: go())
+                if danger:
+                    btn.props("unelevated no-caps color=negative text-color=dark")
+                else:
+                    btn.props("unelevated no-caps").classes("edh-grad-btn")
         dlg.open()
 
     def show_log(jid):
         with dialog_host, ui.dialog().props("maximized") as dlg, ui.card().classes("edh-card w-full h-full"):
             with ui.row().classes("w-full justify-between items-center"):
                 ui.label(f"Log · {jid}").classes("edh-title")
-                ui.button(icon="close", on_click=dlg.close).props("flat round")
+                ui.button(icon="close", on_click=dlg.close).props('flat round aria-label="Close"')
             log = ui.log(max_lines=2000).classes("edh-log w-full grow")
             pos = {"n": 0}
 
@@ -1249,6 +1754,9 @@ def build_page(be, local: bool = False):
                     chk = ui.switch("Check it (1 request)", value=True)
 
                     async def add():
+                        if q_in.value is None or q_in.value < 1:
+                            ui.notify("Monthly quota must be a positive number", type="warning")
+                            return
                         r = await call("key_add", name=name_in.value or "", secret=key_in.value or "",
                                        quota_=int(q_in.value), check=bool(chk.value))
                         if r is None:
@@ -1293,7 +1801,8 @@ def build_page(be, local: bool = False):
                                     await refresh_keys_select()
 
                                 ui.button(icon="delete_outline", on_click=lambda n=k["name"]: confirm(
-                                    f"Remove key {n}?", lambda n=n: remove(n))).props("flat round color=grey-6")
+                                    f"Remove key {n}?", lambda n=n: remove(n))).props('flat round color=grey-6 aria-label="Remove key"').tooltip(
+                                    "Remove key")
                     pct = q["used"] / k["quota"] if k["quota"] else 0
                     with ui.row().classes("w-full items-center gap-6 no-wrap"):
                         ui.circular_progress(value=min(1, pct), show_value=False, size="64px",
@@ -1311,7 +1820,11 @@ def build_page(be, local: bool = False):
                         used_in = ui.number("Used, as shown on the EDH quota page", min=0).classes("w-80")
 
                         async def calibrate(u=used_in, n=k["name"]):
-                            await call("key_calibrate", name=n, used=int(u.value or 0))
+                            if u.value is None or u.value < 0:
+                                ui.notify("Enter the number shown on the Earth Data Hub quota page", type="warning")
+                                return
+                            if await call("key_calibrate", name=n, used=int(u.value)) is None:
+                                return
                             await refresh_key_list()
                             await refresh_quota()
                             ui.notify("calibrated")
@@ -1320,6 +1833,9 @@ def build_page(be, local: bool = False):
                         quota_in = ui.number("Monthly quota", value=k["quota"], min=1).classes("w-44")
 
                         async def set_quota(qi=quota_in, n=k["name"]):
+                            if qi.value is None or qi.value < 1:
+                                ui.notify("Monthly quota must be a positive number", type="warning")
+                                return
                             await call("key_set_quota", name=n, quota_=int(qi.value))
                             await refresh_key_list()
                             await refresh_quota()
@@ -1361,7 +1877,7 @@ def _int(v):
 
 
 _WATCHED = ("start", "end", "start_hour", "end_hour", "freq", "hours", "tz_offset", "mode", "west", "south", "east", "north", "points",
-            "lon_convention", "directory", "name", "out_format", "keepbits", "lossless", "chunk_layout",
+            "lon_convention", "directory", "name", "out_format", "target_mode", "target_store", "extend_direction", "keepbits", "lossless", "chunk_layout",
             "chunk_time", "chunk_lat", "chunk_lon", "chunk_points", "dtype", "compressor", "clevel", "shuffle",
             "sharding", "shard_auto", "shard_time", "shard_space", "extra_attrs", "connections",
             "quota_safety", "wait_for_quota", "memory_gb", "key")

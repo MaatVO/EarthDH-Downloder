@@ -121,6 +121,7 @@ def main(argv=None):
                 print(f"{'*' if key.name == d else ' '} {key.name:<16} {key.source:<7} id {key.fingerprint}  "
                       f"used {q['used']}/{key.quota} this month")
         elif a.kcmd == "add":
+            print("Get a free Earth Data Hub API key at: https://earthdatahub.destine.eu/quota-api-keys")
             secret = getpass.getpass("API key: ")
             if not a.no_check:
                 ok, msg = asyncio.run(keys.validate(secret))

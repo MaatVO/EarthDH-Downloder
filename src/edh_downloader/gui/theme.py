@@ -12,8 +12,7 @@ MUTED = "#98a2b0"
 OK = "#3ecf8e"
 WARN = "#f2b84b"
 ERR = "#ef5f6b"
-# kept for imports elsewhere
-NAVY, PURPLE, PINK, YELLOW, CYAN = BG, ACCENT, ACCENT, WARN, ACCENT
+PINK = ACCENT  # selection colour on the map
 
 CSS = f"""
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,7 +24,7 @@ CSS = f"""
   --edh-ok: {OK}; --edh-warn: {WARN}; --edh-err: {ERR}; --edh-r: 6px;
 }}
 html, body {{ background: var(--edh-bg) !important; color: var(--edh-text); font-family: 'Roboto', system-ui, sans-serif; }}
-.q-page-container {{ padding-top: 64px !important; }}
+@media (min-width: 1280px) {{ .q-page-container {{ padding-top: 64px !important; }} }}  /* below that the header can wrap: Quasar measures it */
 .nicegui-content {{ padding: 24px !important; }}
 
 /* header */
@@ -68,15 +67,39 @@ a {{ color: var(--edh-accent); }}
 
 /* controls: square-ish, solid */
 .q-btn {{ letter-spacing: 0; }}
+/* NiceGUI loads Quasar's !important rules in a layer, and those beat unlayered !important. An earlier layer beats them. */
+@layer overrides {{
+  .q-btn:focus-visible, .q-tab:focus-visible {{ outline: 2px solid var(--edh-accent) !important; outline-offset: 2px; }}
+  .q-btn.bg-primary, .edh-grad-btn, .edh-grad-btn.bg-primary {{ color: var(--edh-bg) !important; }}
+  .edh-grad-btn.disabled, .edh-grad-btn[disabled] {{ background: var(--edh-surface-2) !important; color: var(--edh-muted) !important; }}
+}}
 .q-btn--rounded, .edh-toggle, .edh-toggle .q-btn {{ border-radius: var(--edh-r) !important; }}
 .edh-toggle {{ border: 0; background: var(--edh-surface-2); }}
-.edh-grad-btn, .edh-grad-btn.bg-primary {{ background: var(--edh-accent) !important; color: #fff !important; }}
-.edh-grad-btn.disabled, .edh-grad-btn[disabled] {{ background: var(--edh-surface-2) !important; color: var(--edh-muted) !important; }}
-.edh-grad-bar .q-linear-progress__model {{ background: var(--edh-accent) !important; }}
+.edh-grad-btn, .edh-grad-btn.bg-primary {{ background: var(--edh-accent) !important; }}
+.edh-grad-bar .q-linear-progress__model {{ background: var(--edh-bar, var(--edh-accent)) !important; }}
+.edh-bar-positive {{ --edh-bar: var(--edh-ok); }}
+.edh-bar-warning {{ --edh-bar: var(--edh-warn); }}
+.edh-bar-negative {{ --edh-bar: var(--edh-err); }}
+.edh-bar-grey-6 {{ --edh-bar: var(--edh-muted); }}
+.edh-job-tiles {{ display: grid; grid-template-columns: repeat(4, 11rem); gap: 12px; }}
+.edh-kpi-value, .edh-tabular {{ font-variant-numeric: tabular-nums; }}
+@media (max-width: 767px) {{ .edh-job-tiles {{ width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .edh-grad-bar .q-linear-progress__track {{ background: var(--edh-surface-2) !important; opacity: 1 !important; }}
 .q-chip {{ border-radius: 4px; }}
 .edh-badge {{ font-size: 12px; padding: 2px 6px; border-radius: 4px; }}
 .edh-sel-box {{ background: var(--edh-surface-2); border-radius: var(--edh-r); }}
+
+/* catalogue images: transparent 2:1 global maps, set into a tonal well and never cropped */
+.edh-thumb {{ flex: none; display: flex; align-items: center; justify-content: center; aspect-ratio: 2 / 1;
+  background: var(--edh-surface-2); border-radius: var(--edh-r); overflow: hidden; color: var(--edh-muted); }}
+.edh-thumb img {{ width: 100%; height: 100%; object-fit: contain; }}
+.edh-thumb .q-img {{ width: 100%; height: 100%; }}
+.edh-thumb .q-img__content > div {{ background: transparent; padding: 0; }}
+.edh-thumb-sm {{ width: 64px; }}
+.edh-thumb-md {{ width: 88px; }}
+.edh-thumb-lg {{ width: 176px; }}
+.edh-option-text {{ min-width: 0; }}
+.edh-option-text .q-item__label {{ overflow-wrap: anywhere; }}
 
 /* tables, expansions, map, log */
 .edh-table, .edh-table .q-table__top, .edh-table .q-table__bottom, .edh-table thead tr {{ background: transparent !important; }}
@@ -91,6 +114,9 @@ a {{ color: var(--edh-accent); }}
 .leaflet-control-attribution {{ background: var(--edh-surface) !important; color: var(--edh-muted) !important; }}
 .edh-map-btn {{ background: var(--edh-surface) !important; color: #fff !important; }}
 .edh-log {{ background: var(--edh-bg) !important; border-radius: var(--edh-r); font-family: 'Roboto Mono', monospace; font-size: 12px; }}
+.edh-code {{ display: flex; align-items: flex-start; gap: 8px; background: var(--edh-bg); border-radius: var(--edh-r);
+  padding: 10px 12px; font-family: 'Roboto Mono', monospace; font-size: 12px; line-height: 1.6; }}
+.edh-code-text {{ white-space: pre-wrap; overflow-wrap: anywhere; }}
 .edh-quota-link {{ color: var(--edh-muted); display: inline-flex; }}
 
 /* dataset structure tree */
@@ -103,11 +129,11 @@ a {{ color: var(--edh-accent); }}
 .edh-tree .st-attr, .edh-tree .st-dims {{ color: var(--edh-text); }}
 .edh-tree .st-group, .edh-tree .st-more, .edh-tree .st-sub {{ color: var(--edh-muted); }}
 .edh-tree .st-group {{ font-size: 12px; }}
-.edh-tree .st-sub {{ font-size: 11.5px; line-height: 1.5; }}
+.edh-tree .st-sub {{ font-size: 12px; line-height: 1.5; }}
 .edh-tree .st-sub b {{ color: var(--edh-text); font-weight: 500; }}
-.edh-tree .st-type {{ color: var(--edh-muted); font-size: 11px; }}
+.edh-tree .st-type {{ color: var(--edh-muted); font-size: 12px; }}
 .edh-tree .st-detail {{ white-space: normal; line-height: 1.55; padding: 0 0 4px 24px; }}
-.edh-tree .st-chip {{ display: inline; color: var(--edh-muted); margin-right: 8px; font-size: 11px; }}
+.edh-tree .st-chip {{ display: inline; color: var(--edh-muted); margin-right: 8px; font-size: 12px; }}
 .edh-tree .st-codecs {{ margin-top: 6px; }}
 .st-legend {{ display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--edh-muted); }}
 .st-sw {{ display: inline-block; width: 14px; height: 10px; margin-right: -8px; }}
@@ -126,6 +152,24 @@ a {{ color: var(--edh-accent); }}
 .edh-ctab:hover {{ background: var(--edh-surface-2); color: var(--edh-text); }}
 .edh-ctab-active {{ background: var(--edh-surface-2); color: var(--edh-text); }}
 .edh-dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--edh-ok); display: inline-block; }}
+
+/* job actions */
+.edh-job-actions .q-btn .q-icon {{ font-size: 18px; }}
+.edh-menu {{ background: var(--edh-surface-2) !important; box-shadow: none !important; }}
+@media (pointer: coarse) {{ .edh-job-actions .q-btn {{ min-height: 44px; min-width: 44px; }} }}
+
+/* browser surfaces */
+::selection {{ background: var(--edh-selected); color: var(--edh-text); }}
+html {{ scrollbar-color: var(--edh-surface-2) var(--edh-bg); }}
+
+/* phones */
+@media (max-width: 639px) {{
+  .nicegui-content {{ padding: 12px !important; }}
+  .edh-card {{ padding: 16px !important; }}
+  .edh-tabs .q-tab__icon {{ display: none; }}
+  .edh-tabs .q-tab {{ min-height: 44px; padding: 0 12px; }}
+  .q-field__native {{ font-size: 16px; }}
+}}
 </style>
 """
 

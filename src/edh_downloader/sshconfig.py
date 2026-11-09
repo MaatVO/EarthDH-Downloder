@@ -21,6 +21,8 @@ class Entry:
     user: str = ""
     port: int = 0
     proxy: str = ""
+    known_hosts: str = ""  # UserKnownHostsFile (space-separated), empty: default
+    strict: str = ""  # StrictHostKeyChecking, lower case
 
 
 def _lines(path: Path, depth: int = 0):
@@ -89,7 +91,8 @@ def lookup(alias: str, path: Path | None = None) -> Entry:
     except ValueError:
         port = 0
     hostname = opts.get("hostname", "").replace("%h", alias)
-    return Entry(alias, hostname, opts.get("user", ""), port, opts.get("proxyjump", ""))
+    return Entry(alias, hostname, opts.get("user", ""), port, opts.get("proxyjump", ""),
+                 opts.get("userknownhostsfile", ""), opts.get("stricthostkeychecking", "").lower())
 
 
 def hosts(path: Path | None = None) -> list[Entry]:

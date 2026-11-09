@@ -11,7 +11,7 @@ import platform
 import threading
 from pathlib import Path
 
-from . import __version__, catalog, chunking, keys, quota, runner, sample
+from . import __version__, catalog, chunking, keys, quota, runner, sample, store
 from .gui import structure
 from .http import RequestCounter
 from .job import JobSpec
@@ -71,20 +71,24 @@ def key_test(name: str) -> dict:
     return {"ok": ok, "msg": msg}
 
 
-def key_remove(name: str) -> None:
+def key_remove(name: str) -> dict:
     keys.remove_key(name)
+    return {"ok": True}
 
 
-def key_default(name: str) -> None:
+def key_default(name: str) -> dict:
     keys.set_default(name)
+    return {"ok": True}
 
 
-def key_set_quota(name: str, quota_: int) -> None:
+def key_set_quota(name: str, quota_: int) -> dict:
     keys.set_quota(name, int(quota_))
+    return {"ok": True}
 
 
-def key_calibrate(name: str, used: int) -> None:
+def key_calibrate(name: str, used: int) -> dict:
     quota.calibrate(keys.get_key(name).fingerprint, int(used))
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ catalogue and datasets
@@ -171,10 +175,34 @@ def job_start(spec: dict) -> dict:
     s = JobSpec.from_dict(spec)
     if not _key(s.download.key):
         raise ValueError("add an API key first")
-    if s.icechunk_path.exists() or s.zarr_path.exists():
-        raise ValueError(f"output {s.output.name} already exists in {s.output.directory}; choose another name")
-    Path(s.output.directory).expanduser().mkdir(parents=True, exist_ok=True)
-    d = runner.create_job(s)
+    name = s.output.name
+    if (not name.strip() or name != name.strip() or name in (".", "..") or "/" in name or "\\" in name
+            or "\0" in name):
+        raise ValueError("the output name must be a plain file name (no slashes, not empty)")
+    if not s.output.directory.strip():
+        raise ValueError("choose an output directory")
+    if not 1 <= int(s.download.connections) <= 64:
+        raise ValueError("connections must be between 1 and 64")
+    with runner.file_lock(runner.jobs_dir() / "start.lock"):  # a double click starts one job
+        if s.output.target_mode == "extend":
+            if not s.icechunk_path.exists():
+                raise ValueError(f"target Icechunk repository {s.icechunk_path} does not exist")
+        elif s.icechunk_path.exists() or s.zarr_path.exists():
+            raise ValueError(f"output {s.output.name} already exists in {s.output.directory}; choose another name")
+        mine = {s.icechunk_path.resolve(), s.zarr_path.resolve()}
+        for j in runner.list_jobs():
+            if j.get("status") in runner.FINISHED or not j.get("spec"):
+                continue
+            try:
+                o = JobSpec.from_dict(j["spec"])
+                theirs = {o.icechunk_path.resolve(), o.zarr_path.resolve()}
+            except Exception:  # noqa: BLE001
+                continue
+            if mine & theirs:
+                raise ValueError(f"job {j['id']} ({j.get('status')}) already writes this output: resume or "
+                                 f"delete it, or choose another name")
+        Path(s.output.directory).expanduser().mkdir(parents=True, exist_ok=True)
+        d = runner.create_job(s)
     return {"id": d.name, "pid": runner.launch(d)}
 
 
@@ -189,36 +217,64 @@ def job_resume(jid: str) -> dict:
     return {"pid": runner.launch(runner.resolve(jid))}
 
 
-def job_stop(jid: str, action: str) -> None:
+def job_stop(jid: str, action: str) -> dict:
     runner.stop(runner.resolve(jid), action)
+    return {"ok": True}
 
 
-def job_connections(jid: str, n: int) -> None:
+def job_connections(jid: str, n: int) -> dict:
     runner.set_control(runner.resolve(jid), connections=int(n))
+    return {"ok": True}
 
 
-def job_delete(jid: str) -> None:
+def job_delete(jid: str) -> dict:
     runner.delete(runner.resolve(jid))
+    return {"ok": True}
+
+
+LOG_TAIL = 2000  # lines shown when the log opens (what the viewer keeps)
 
 
 def job_log(jid: str, offset: int = 0) -> dict:
+    """New log lines from byte ``offset`` (0: the last LOG_TAIL lines); ``next`` is the offset to ask next."""
     p = runner.resolve(jid) / "log.txt"
     if not p.exists():
         return {"lines": [], "next": offset}
-    lines = p.read_text(errors="replace").splitlines()
-    return {"lines": lines[offset:], "next": len(lines)}
+    with open(p, "rb") as f:
+        size = f.seek(0, 2)
+        if offset > size:  # log replaced
+            offset = 0
+        start = offset if offset else max(0, size - LOG_TAIL * 400)
+        f.seek(start)
+        data = f.read()
+    cut = data.rfind(b"\n") + 1  # only whole lines; the rest comes next time
+    lines = data[:cut].decode(errors="replace").splitlines()
+    if not offset and start:
+        lines = lines[1:]  # first line was cut in the middle
+    return {"lines": lines[-LOG_TAIL:] if not offset else lines, "next": start + cut}
 
 
 def store_structure(path: str) -> dict:
     p = Path(path)
     key = (str(p), (p / "zarr.json").stat().st_mtime if (p / "zarr.json").exists() else p.stat().st_mtime)
-    if key not in _STORE_CACHE:
-        _STORE_CACHE.clear()
-        _STORE_CACHE[key] = structure.from_store(p)
-    return _STORE_CACHE[key]
+    with _LOCK:
+        hit = _STORE_CACHE.pop(key, None)
+    if hit is None:
+        hit = structure.from_store(p)
+    with _LOCK:
+        _STORE_CACHE[key] = hit  # most recent last
+        for k in [k for k in _STORE_CACHE if k[0] == key[0] and k != key]:  # store changed: drop the old view
+            del _STORE_CACHE[k]
+        while len(_STORE_CACHE) > 16:
+            del _STORE_CACHE[next(iter(_STORE_CACHE))]
+    return hit
+
+
+def store_inspect(path: str) -> dict:
+    return store.inspect_icechunk_for_extend(path)
 
 
 METHODS = {f.__name__: f for f in (
     hello, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
     collections, datasets, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
-    job_connections, job_delete, job_log, store_structure)}
+    job_connections, job_delete, job_log, store_structure, store_inspect)}

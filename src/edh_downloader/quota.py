@@ -34,7 +34,9 @@ def _locked():
         try:
             raw = f.read()
             data = json.loads(raw) if raw.strip() else {}
-        except json.JSONDecodeError:
+        except ValueError:
+            data = {}
+        if not isinstance(data, dict):
             data = {}
         yield data
         f.seek(0)
@@ -45,7 +47,16 @@ def _locked():
 
 
 def _entry(data: dict, fp: str, month: str) -> dict:
-    return data.setdefault(fp, {}).setdefault(month, {"app": 0, "offset": 0, "calibrated_at": None})
+    months = data.get(fp)
+    if not isinstance(months, dict):
+        months = data[fp] = {}
+    e = months.get(month)
+    if not isinstance(e, dict):
+        e = months[month] = {}
+    e.setdefault("app", 0)
+    e.setdefault("offset", 0)
+    e.setdefault("calibrated_at", None)
+    return e
 
 
 def add(fp: str, n: int) -> int:

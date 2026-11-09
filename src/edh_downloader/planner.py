@@ -32,10 +32,6 @@ class VarPlan:
     tiles: list[tuple[int, int]]
     groups: list[list[tuple[int, int]]] = field(default_factory=list)
 
-    @property
-    def nlev(self) -> int:
-        return max(1, len(self.level_idx))
-
     def chunk_url(self, base: str, t: int | None, li: int | None, ty: int, tx: int) -> str:
         parts = [self.var.name, "c"]
         if t is not None:
@@ -183,6 +179,10 @@ class Plan:
             self.units = [Unit(0, 0, 0, 0, 0, static=True)]
             return
         times = ds.time
+        if not (0 <= t.start_hour <= 23 and 0 <= t.end_hour <= 23):
+            raise PlanError("the hours must be between 0 and 23")
+        if not -23 <= t.tz_offset <= 23:
+            raise PlanError("the UTC offset must be between -23 and 23 hours")
         start = pd.Timestamp(t.start) + pd.Timedelta(hours=t.start_hour)
         end = pd.Timestamp(t.end) + pd.Timedelta(hours=t.end_hour + 1)  # end exclusive
         if start >= end:

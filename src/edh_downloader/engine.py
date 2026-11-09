@@ -14,7 +14,6 @@ Pipeline (same design as the original ``edh_daily.py``, generalised):
 import asyncio
 import logging
 import os
-import queue
 import shutil
 import signal
 import threading
@@ -41,15 +40,11 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-class Stop(Exception):
-    pass
-
-
 class Limiter:
     """A semaphore whose capacity can change while tasks are waiting."""
 
     def __init__(self, n: int):
-        self.capacity = n
+        self.capacity = max(1, min(MAX_CONNECTIONS, int(n)))
         self.active = 0
         self.cond = asyncio.Condition()
 
@@ -83,14 +78,18 @@ def dir_bytes(path: Path) -> int:
 class Engine:
     def __init__(self, job_dir: Path, log: logging.Logger | None = None):
         self.dir = Path(job_dir)
-        meta = read_json(self.dir / "job.json")
-        if meta is None:
+        meta = read_json(self.dir / "job.json", None, dict)
+        if meta is None or not isinstance(meta.get("spec"), dict):
             raise FileNotFoundError(self.dir / "job.json")
         self.job_id = meta.get("id", self.dir.name)
         self.spec = JobSpec.from_dict(meta["spec"])
+        o = self.spec.output
+        if o.target_mode == "extend":
+            o.keep_icechunk = True  # never delete the repository being extended
+            o.export_zarr = o.export_zarr or self.spec.zarr_path.exists()  # keep its companion Zarr current
         self.log = log or logging.getLogger("edh")
         self.state_path = self.dir / "state.json"
-        self.state = read_json(self.state_path, {}) or {}
+        self.state = read_json(self.state_path, {}, dict)
         self.state.setdefault("units_done", [])
         self.state.setdefault("requests_job", 0)
         self.state.setdefault("bytes_job", 0)
@@ -107,7 +106,7 @@ class Engine:
             write_json_atomic(self.state_path, self.state)
 
     def control(self) -> dict:
-        return read_json(self.dir / "control.json", {}) or {}
+        return read_json(self.dir / "control.json", {}, dict)
 
     def request_stop(self, reason: str):
         if not self.stop_event.is_set():
@@ -121,6 +120,12 @@ class Engine:
         signal.signal(signal.SIGTERM, lambda *_: self.request_stop(self.control().get("action", "pause")))
         signal.signal(signal.SIGINT, lambda *_: self.request_stop("pause"))
         try:
+            if self.state.get("exported") and spec.zarr_path.exists() and spec.output.target_mode != "extend":
+                # crashed after the export (e.g. while removing the repository): nothing left to download
+                if not spec.output.keep_icechunk:
+                    self._remove_icechunk()
+                self._done()
+                return "completed"
             key = keys.get_key(spec.download.key)
             limit = int(key.quota * spec.download.quota_safety)
             self.counter = RequestCounter(key.fingerprint, limit=limit)
@@ -160,6 +165,23 @@ class Engine:
 
     def _open_repo(self):
         path = self.spec.icechunk_path
+        if self.spec.output.target_mode == "extend":
+            repo = store.open_repo(path)
+            if repo is None:
+                raise Fatal(f"cannot extend: {path} is not an Icechunk repository")
+            direction = self.spec.output.extend_direction or "forward"
+            self.log.info(f"extending {direction} into Icechunk repository {path}")
+            done = store.extension_done(repo, self.job_id)  # committed with the resize: never extend twice
+            if done is None:
+                problem = store.check_extension(repo, self.plan, direction)
+                if problem:
+                    raise Fatal(f"cannot extend {path.name}: {problem}")
+                done = store.extend_repo(repo, self.plan, direction, self.job_id)
+            self.time_offset = done["offset"]
+            self.save_state(time_offset=self.time_offset, extend_direction=direction)
+            self.repo = repo
+            return
+
         repo = store.open_repo(path)
         if repo is None:
             if path.exists() and any(path.iterdir()):
@@ -172,13 +194,17 @@ class Engine:
             if g.attrs.get("edh_job_id") != self.job_id:
                 raise Fatal(f"{path} belongs to another job ({g.attrs.get('edh_job_id')}); choose another output name")
             self.log.info(f"resuming into {path}")
+        self.time_offset = 0
         self.repo = repo
 
     def _finish(self):
         plan, spec = self.plan, self.spec
         extra = {"edh_requests": self.state["requests_job"], "edh_bytes_downloaded": self.state["bytes_job"],
                  "edh_completed": now_iso()}
-        store.set_attrs(self.repo, store.root_attrs(plan, self.job_id, "complete", extra), "job complete")
+        if spec.output.target_mode == "extend":
+            store.update_extended_attrs(self.repo, plan, self.job_id, extra)
+        else:
+            store.set_attrs(self.repo, store.root_attrs(plan, self.job_id, "complete", extra), "job complete")
         if spec.output.export_zarr:
             self.save_state(status="exporting", message=f"exporting to {spec.zarr_path}")
             self.log.info(f"exporting to {spec.zarr_path}")
@@ -186,15 +212,24 @@ class Engine:
                                   memory_gb=spec.download.memory_gb,
                                   progress=lambda d, t: self.save_state(message=f"exporting {d}/{t}"))
             self.log.info(f"exported {n} objects ({human_bytes(dir_bytes(spec.zarr_path))})")
+            self.save_state(exported=True)  # from here on, a crash only has to finish the cleanup
             if not spec.output.keep_icechunk:
-                shutil.rmtree(spec.icechunk_path)
-                self.log.info("removed the Icechunk repository (keep_icechunk is off)")
+                self._remove_icechunk()
+        self._done()
+
+    def _remove_icechunk(self):
+        if self.spec.icechunk_path.exists():
+            shutil.rmtree(self.spec.icechunk_path)
+        self.log.info("removed the Icechunk repository (keep_icechunk is off)")
+
+    def _done(self):
+        spec = self.spec
         spool = self.spool_dir()
         if spool.exists():
             shutil.rmtree(spool, ignore_errors=True)
         outputs = [str(p) for p in (spec.icechunk_path, spec.zarr_path) if p.exists()]
         self.save_state(status="completed", pid=None, finished_at=now_iso(), message="done", outputs=outputs,
-                        eta_s=0)
+                        output_bytes=sum(dir_bytes(Path(p)) for p in outputs), eta_s=0)
         self.log.info(f"completed: {outputs}")
 
     # ---------------------------------------------------------------- spool
@@ -216,12 +251,41 @@ class Engine:
         p = self.chunk_path(c)
         dec = vp.var.decoder()
         if p.exists():
-            a = dec.decode(p.read_bytes())
+            try:
+                a = dec.decode(p.read_bytes())
+            except Exception as e:  # noqa: BLE001 - truncated/garbage download: drop it so a resume fetches it again
+                p.unlink(missing_ok=True)
+                raise RuntimeError(f"downloaded chunk {p.name} of {c[0]} is corrupt ({e}); it was discarded, "
+                                   f"resume the job to download it again") from e
         else:
             a = dec.empty()
         if vp.var.kind == "level":
             a = a.reshape(a.shape[0], a.shape[2], a.shape[3])
         return a
+
+    def _adopt_sampled(self, todo) -> int:
+        """Move chunks the sample already downloaded (recently) into the spool: no request is spent twice."""
+        from .sample import RAW_TTL, raw_path
+
+        plan, n, now = self.plan, 0, time.time()
+        for u in todo:
+            for c in plan.unit_needs[u.index]:
+                if self.chunk_present(c):
+                    continue
+                vp = plan.vars[c[1]]
+                src = raw_path(vp.chunk_url(plan.ds.url, c[2], c[3], c[4], c[5]))
+                for q, miss in ((src, False), (src.with_suffix(".miss"), True)):
+                    try:
+                        if not q.exists() or now - q.stat().st_mtime > RAW_TTL:
+                            continue
+                        p = self.chunk_path(c)
+                        p.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(q), str(p.with_suffix(p.suffix + ".miss") if miss else p))
+                        n += 1
+                        break
+                    except OSError:
+                        continue
+        return n
 
     # ---------------------------------------------------------------- pipeline
     async def _pipeline(self):
@@ -234,6 +298,9 @@ class Engine:
         lock = threading.Lock()
         need: dict[tuple, list[int]] = {}
         remaining = {}
+        adopted = self._adopt_sampled(todo)
+        if adopted:
+            self.log.info(f"reusing {adopted} chunks downloaded by the sample")
         for u in todo:
             missing = 0
             for c in plan.unit_needs[u.index]:
@@ -324,15 +391,26 @@ class Engine:
                     self.log.error(str(e))
                     self.request_stop("error")
                     continue
+                except Exception as e:  # noqa: BLE001 - a worker must never die silently (the job would wait forever)
+                    self.errors.append(f"download: {type(e).__name__}: {e}")
+                    self.log.exception(f"download failed: {e}")
+                    self.request_stop("error")
+                    continue
                 p = self.chunk_path(c)
-                p.parent.mkdir(parents=True, exist_ok=True)
-                if data is None:
-                    p.with_suffix(p.suffix + ".miss").touch()
-                else:
-                    tmp = p.with_suffix(".part")
-                    tmp.write_bytes(data)
-                    os.replace(tmp, p)
-                    stats["bytes"] += len(data)
+                try:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    if data is None:
+                        p.with_suffix(p.suffix + ".miss").touch()
+                    else:
+                        tmp = p.with_suffix(".part")
+                        tmp.write_bytes(data)
+                        os.replace(tmp, p)
+                        stats["bytes"] += len(data)
+                except OSError as e:
+                    self.errors.append(f"cannot write {p}: {e}")
+                    self.log.error(f"cannot write {p}: {e}")
+                    self.request_stop("error")
+                    continue
                 stats["req"] += 1
                 chunk_done(c)
 
@@ -472,7 +550,8 @@ class Engine:
                 continue
             for li in (vp.level_idx or [None]):
                 lpos = () if li is None else (plan.level_pos[li],)
-                tsl = () if static else (slice(u.k0, u.k1),)
+                offset = getattr(self, "time_offset", 0)
+                tsl = () if static else (slice(offset + u.k0, offset + u.k1),)
                 if plan.points is not None:
                     arr = self._assemble_points(u, vp, li)
                     for stat, name in zip(vp.stats, vp.out_names):

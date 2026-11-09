@@ -39,10 +39,17 @@ async def _stac_get(session: aiohttp.ClientSession, url: str) -> dict:
         return await r.json(content_type=None)
 
 
+def _thumbnail(stac_object: dict) -> str | None:
+    """The catalogue image of a collection or item. Public and outside the API, so it costs no quota."""
+    href = ((stac_object.get("assets") or {}).get("thumbnail") or {}).get("href")
+    return href if isinstance(href, str) and href.startswith("https://") else None
+
+
 async def fetch_collections() -> list[dict]:
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as s:
         d = await _stac_get(s, f"{STAC}/collections")
-    return [{"id": c["id"], "title": c.get("title", c["id"]), "description": c.get("description", "")}
+    return [{"id": c["id"], "title": c.get("title", c["id"]), "description": c.get("description", ""),
+             "thumbnail": _thumbnail(c)}
             for c in d.get("collections", [])]
 
 
@@ -72,6 +79,7 @@ async def fetch_items(collection: str) -> list[dict]:
             "end": p.get("end_datetime") or p.get("datetime"),
             "deprecated": p.get("deprecated", False),
             "bbox": it.get("bbox"),
+            "thumbnail": _thumbnail(it),
         })
     return sorted(out, key=lambda x: x["id"])
 
@@ -79,7 +87,8 @@ async def fetch_items(collection: str) -> list[dict]:
 def _cached(name: str, ttl: float, fetch, refresh: bool = False):
     path = cache_dir() / name
     d = read_json(path)
-    if d is not None and not refresh and time.time() - d["t"] < ttl:
+    # a cache written before thumbnails were read has no such field: fetch again, but keep it as the offline fallback
+    if d is not None and not refresh and time.time() - d["t"] < ttl and all("thumbnail" in x for x in d["v"]):
         return d["v"]
     try:
         v = fetch()

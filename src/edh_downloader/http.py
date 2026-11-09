@@ -26,7 +26,6 @@ class RequestCounter:
         self.flush_every = flush_every
         self._pending = 0
         self._lock = threading.Lock()
-        self.session_total = 0
         self.month_used = quota.used(fingerprint)
 
     def reserve(self) -> None:
@@ -34,7 +33,6 @@ class RequestCounter:
             if self.limit is not None and self.month_used + 1 > self.limit:
                 raise QuotaReached(f"local quota limit {self.limit} reached ({self.month_used} used this month)")
             self.month_used += 1
-            self.session_total += 1
             self._pending += 1
             flush = self._pending >= self.flush_every
         if flush:

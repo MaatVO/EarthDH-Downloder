@@ -60,6 +60,13 @@ def main():
     with ThreadPoolExecutor(max_workers=16) as pool:
         for line in sys.stdin:
             line = line.strip()
-            if line:
-                pool.submit(handle, json.loads(line))
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+                if not isinstance(req, dict) or "id" not in req:
+                    raise ValueError("not a request")
+            except ValueError:  # a stray line must not end the session
+                continue
+            pool.submit(handle, req)
     os._exit(0)

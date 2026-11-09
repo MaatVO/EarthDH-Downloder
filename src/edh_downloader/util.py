@@ -23,12 +23,15 @@ def write_json_atomic(path: Path | str, data: Any, mode: int | None = None) -> N
         raise
 
 
-def read_json(path: Path | str, default: Any = None) -> Any:
+def read_json(path: Path | str, default: Any = None, kind: type | None = None) -> Any:
+    """The JSON in ``path``, or ``default`` when it is missing, unreadable as JSON (also binary garbage) or, with
+    ``kind``, not of that type (a stray ``[]`` where an object is expected)."""
     try:
         with open(path) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+            data = json.load(f)
+    except (FileNotFoundError, ValueError):  # JSONDecodeError and UnicodeDecodeError are ValueErrors
         return default
+    return data if kind is None or isinstance(data, kind) else default
 
 
 def human_bytes(n: float) -> str:

@@ -39,7 +39,27 @@ def _path():
 
 
 def _load() -> dict:
-    return read_json(_path(), {"default": None, "keys": {}})
+    """keys.json, always with the right shape. A damaged file is kept aside (keys.json.bad) instead of crashing
+    every screen, or being silently overwritten by the next change."""
+    path = _path()
+    d = read_json(path, None)
+    if d is not None and not (isinstance(d, dict) and isinstance(d.get("keys", {}), dict)
+                              and all(isinstance(v, dict) and isinstance(v.get("secret"), str)
+                                      for v in d.get("keys", {}).values())):
+        try:
+            os.replace(path, path.with_name(path.name + ".bad"))
+        except OSError:
+            pass
+        d = None
+    elif d is None and path.exists() and path.stat().st_size:  # not JSON at all
+        try:
+            os.replace(path, path.with_name(path.name + ".bad"))
+        except OSError:
+            pass
+    d = d or {}
+    d.setdefault("default", None)
+    d.setdefault("keys", {})
+    return d
 
 
 def _save(d: dict) -> None:
@@ -66,7 +86,10 @@ def list_keys() -> list[ApiKey]:
 def get_key(name: str | None = None) -> ApiKey:
     keys = {k.name: k for k in list_keys()}
     if not keys:
-        raise KeyError("no API key configured: add one in the Keys page or with `edh-dl keys add NAME`")
+        raise KeyError(
+            "no API key configured: get a free key at https://earthdatahub.destine.eu/quota-api-keys "
+            "then add it in the Keys page or with `edh-dl keys add NAME`"
+        )
     if name is None:
         name = _load().get("default") or next(iter(keys))
         if name not in keys:
@@ -89,6 +112,8 @@ def add_key(name: str, secret: str, quota: int = DEFAULT_QUOTA, make_default: bo
         raise ValueError("name and key must be non-empty")
     if name == NETRC_NAME:
         raise ValueError(f"'{NETRC_NAME}' is reserved for the key read from ~/.netrc")
+    if int(quota) < 1:
+        raise ValueError("the monthly quota must be a positive number")
     d = _load()
     d["keys"][name] = {"secret": secret, "quota": int(quota)}
     if make_default or not d.get("default"):
@@ -113,6 +138,8 @@ def set_default(name: str) -> None:
 
 
 def set_quota(name: str, quota: int) -> None:
+    if int(quota) < 1:
+        raise ValueError("the monthly quota must be a positive number")
     d = _load()
     if name in d["keys"]:
         d["keys"][name]["quota"] = int(quota)

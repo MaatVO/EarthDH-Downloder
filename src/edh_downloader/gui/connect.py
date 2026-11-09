@@ -11,10 +11,9 @@ import asyncio
 import json
 import secrets
 import socket
-from urllib.parse import urlsplit
 
 import asyncssh
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from nicegui import Client, app, ui
 
 from .. import __version__, backend, remote, sshconfig
@@ -340,12 +339,12 @@ def _connect_form(on_connected, open_local):
                 passphrase=form["passphrase"] if form["auth"] == "key" else None, log=log, install_ok=install_ok)
         except remote.UnknownHost as e:
             def ok(e=e):  # bind: Python unbinds ``e`` when the except block ends
-                remote.trust(e.host, e.port, e.key)
+                remote.trust(e.host, e.port, e.key, e.path)
                 later(lambda: connect(install_ok))
 
             dialog("Unknown server", f"First connection to **{e.host}**. Check that its key fingerprint is the "
                    f"expected one:\n\n`{e.algorithm}  {e.fingerprint}`\n\nTrusting it adds it to "
-                   "`~/.ssh/known_hosts`, like answering *yes* in ssh.", [("Trust and connect", ok)])
+                   f"`{e.path or '~/.ssh/known_hosts'}`, like answering *yes* in ssh.", [("Trust and connect", ok)])
             return
         except remote.SetupNeeded:
             dialog("Set up the server",

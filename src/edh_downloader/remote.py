@@ -7,6 +7,7 @@ jobs run detached and keep going.
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import shlex
@@ -20,9 +21,20 @@ from . import __version__, backend, bundle, sshconfig
 from .paths import config_dir
 from .util import read_json, write_json_atomic
 
-STATE_DIR = "~/.local/share/edh-dl"  # on the server: venv/ and agent/<build>.zip
+STATE_DIR = "~/.local/share/edh-dl"  # on the server: venv-<deps id>/ and agent/<build>.zip
 DEPS = ["aiohttp>=3.9", "icechunk>=2", "numcodecs>=0.15", "numpy>=2", "pandas>=2.2", "xarray>=2024.10", "zarr>=3"]
 PROBE = "import aiohttp, icechunk, numcodecs, numpy, pandas, xarray, zarr"
+# Jobs keep running with the code (agent/<build>.zip) and the environment that started them. So nothing a newer app
+# version installs may touch them: each build has its own zip, each dependency set its own venv, and an existing
+# environment is never rebuilt in place (``--clear`` would pull the packages from under a running download).
+DEPS_ID = hashlib.sha256("\n".join(DEPS).encode()).hexdigest()[:10]
+LEGACY_DEPS = [  # the set apps before versioned environments installed in venv/
+    "aiohttp>=3.9", "icechunk>=2", "numcodecs>=0.15", "numpy>=2", "pandas>=2.2", "xarray>=2024.10",
+               "zarr>=3"]
+
+
+def venv_dir(state: str) -> str:
+    return f"{state}/venv-{DEPS_ID}"
 
 
 @dataclass
@@ -58,9 +70,9 @@ def forget(s: Server) -> None:
 class UnknownHost(Exception):
     """The server's host key is not in known_hosts: show ``fingerprint`` and ask."""
 
-    def __init__(self, host, port, key):
+    def __init__(self, host, port, key, path=None):
         super().__init__(f"unknown host key for {host}")
-        self.host, self.port, self.key = host, port, key
+        self.host, self.port, self.key, self.path = host, port, key, path
         self.fingerprint = key.get_fingerprint("sha256")
         self.algorithm = key.get_algorithm()
 
@@ -93,16 +105,41 @@ class Session:
             pass
 
 
-def trust(host: str, port: int, key) -> None:
-    """Append the host key to ~/.ssh/known_hosts (what ssh does when you answer "yes")."""
-    kh = Path.home() / ".ssh" / "known_hosts"
-    kh.parent.mkdir(mode=0o700, exist_ok=True)
+def _known_hosts_file(alias: str, host: str) -> Path:
+    """Where ssh would record ``host``: the alias's UserKnownHostsFile (if any real file), else ~/.ssh/known_hosts."""
+    e = sshconfig.lookup(alias)
+    if host == (e.hostname or alias):
+        for f in e.known_hosts.split():
+            f = os.path.expanduser(f)
+            if f != os.devnull:
+                return Path(f)
+    return Path.home() / ".ssh" / "known_hosts"
+
+
+def trust(host: str, port: int, key, path: Path | None = None) -> None:
+    """Append the host key to known_hosts (what ssh does when you answer "yes")."""
+    kh = Path(path) if path else Path.home() / ".ssh" / "known_hosts"
+    kh.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     name = host if port == 22 else f"[{host}]:{port}"
     with open(kh, "a") as f:
         f.write(f"{name} {key.export_public_key().decode().strip()}\n")
 
 
-async def _connect(s: Server, password: str | None, passphrase: str | None):
+# Host keys asyncssh could not verify. Hooked on the base class because ProxyJump hops are opened by asyncssh
+# itself with a plain SSHClient: this way the key of whichever hop is unknown is captured, on the very
+# connection being made (no separate direct connection, which a jump host setup would not allow).
+_unknown: list[tuple[str, int, object]] = []
+
+
+def _capture(self, host, addr, port, key) -> bool:
+    _unknown.append((host, port, key))
+    return False
+
+
+asyncssh.SSHClient.validate_host_public_key = _capture
+
+
+async def _connect(s: Server, password: str | None, passphrase: str | None, _retry: bool = True):
     kw = dict(keepalive_interval=30, passphrase=passphrase or None)
     if s.port:  # else ~/.ssh/config or 22
         kw["port"] = s.port
@@ -112,14 +149,21 @@ async def _connect(s: Server, password: str | None, passphrase: str | None):
         kw["client_keys"] = [os.path.expanduser(s.key_file)]
     if password:
         kw["password"] = password
+    entry = sshconfig.lookup(s.host)
+    if entry.strict in ("no", "off"):  # as ssh: connect without checking host keys
+        kw["known_hosts"] = None
+    _unknown.clear()
     try:
         return await asyncssh.connect(s.host, **kw)
     except asyncssh.HostKeyNotVerifiable:
-        # an alias: known_hosts is keyed by the real name and port (no ProxyJump here: direct reach only)
-        e = sshconfig.lookup(s.host)
-        host, port = e.hostname or s.host, s.port or e.port or 22
-        key = await asyncssh.get_server_host_key(host, port)
-        raise UnknownHost(host, port, key) from None
+        if not _unknown:
+            raise
+        host, port, key = _unknown[-1]
+        path = _known_hosts_file(s.host, host)
+        if entry.strict == "accept-new" and _retry:
+            trust(host, port, key, path)
+            return await _connect(s, password, passphrase, _retry=False)
+        raise UnknownHost(host, port, key, path) from None
 
 
 async def _sh(conn, cmd: str, check=False) -> tuple[int, str]:
@@ -151,10 +195,11 @@ async def _env_ok(conn, py: str) -> bool:
 
 
 async def setup(conn, log=lambda m: None) -> None:
-    """Create ``<state>/venv`` on the server and install the packages (uv when there, else python3 -m venv)."""
+    """Create ``<state>/venv-<deps id>`` on the server and install the packages (uv when there, else python3 -m
+    venv). A new directory: environments that running jobs use are left alone."""
     home = await _home(conn)
     state = STATE_DIR.replace("~", home, 1)
-    venv = f"{state}/venv"
+    venv = venv_dir(state)
     deps = " ".join(shlex.quote(d) for d in DEPS)
     await _sh(conn, f"mkdir -p {shlex.quote(state)}", check=True)
     rc, _ = await _sh(conn, "command -v uv >/dev/null 2>&1")
@@ -178,6 +223,18 @@ async def setup(conn, log=lambda m: None) -> None:
         raise SetupFailed("the packages were installed but cannot be imported on the server")
 
 
+async def _python(conn, state: str) -> str | None:
+    """The environment for this app's dependency set: its own venv, or the legacy ``venv/`` when that was
+    installed with the same set (so existing servers do not reinstall)."""
+    py = f"{venv_dir(state)}/bin/python"
+    if await _env_ok(conn, py):
+        return py
+    legacy = f"{state}/venv/bin/python"
+    if DEPS == LEGACY_DEPS and await _env_ok(conn, legacy):
+        return legacy
+    return None
+
+
 async def _upload_bundle(conn, state: str, log) -> str:
     data, build = bundle.build()
     dst = f"{state}/agent/{build}.zip"
@@ -199,11 +256,12 @@ async def open_session(s: Server, password: str | None = None, passphrase: str |
     try:
         home = await _home(conn)
         state = STATE_DIR.replace("~", home, 1)
-        py = f"{state}/venv/bin/python"
-        if not await _env_ok(conn, py):
+        py = await _python(conn, state)
+        if py is None:
             if not install_ok:
                 raise SetupNeeded()
             await setup(conn, log)
+            py = f"{venv_dir(state)}/bin/python"
         zip_path = await _upload_bundle(conn, state, log)
         log("starting the agent …")
         proc = await conn.create_process(

@@ -23,3 +23,15 @@ def test_missing_config(tmp_path, monkeypatch):
     monkeypatch.setattr(sshconfig, "SSH_DIR", tmp_path)
     assert sshconfig.hosts() == []
     assert sshconfig.lookup("a").hostname == ""
+
+
+def test_known_hosts_options(tmp_path):
+    from edh_downloader import sshconfig
+
+    cfg = tmp_path / "config"
+    cfg.write_text("Host leo\n  HostName login.example.org\n  StrictHostKeyChecking No\n"
+                   "  UserKnownHostsFile /dev/null\nHost box\n  UserKnownHostsFile ~/kh\n")
+    e = sshconfig.lookup("leo", cfg)
+    assert (e.strict, e.known_hosts) == ("no", "/dev/null")
+    assert sshconfig.lookup("box", cfg).known_hosts == "~/kh"
+    assert sshconfig.lookup("other", cfg).strict == ""
