@@ -25,7 +25,7 @@ from ..runner import ACTIVE
 from ..quota import next_reset
 from ..job import COMPRESSORS, FREQS, STATS, AreaSpec, DownloadSpec, JobSpec, OutputSpec, Point, TimeSpec
 from ..util import human_bytes, human_duration
-from . import structure
+from . import structure, tour
 from .auth import TokenMiddleware
 from .theme import PINK, apply_theme
 
@@ -229,8 +229,10 @@ def parse_attrs(text: str) -> dict:
 
 
 @contextmanager
-def section(n, title: str, subtitle: str = "", wide: bool = False, icon: str | None = None):
-    with ui.card().classes("edh-card w-full min-w-0" + (" col-span-2 max-xl:col-span-1" if wide else "")):
+def section(n, title: str, subtitle: str = "", wide: bool = False, icon: str | None = None, mark: str = ""):
+    """A numbered card; ``mark`` names it for the guided tour (class ``edh-tour-<mark>``)."""
+    with ui.card().classes("edh-card w-full min-w-0" + (" col-span-2 max-xl:col-span-1" if wide else "")
+                           + (f" edh-tour-{mark}" if mark else "")):
         with ui.row().classes("items-center gap-2 no-wrap w-full"):
             ui.html(f'<div class="edh-step">{n}</div>', sanitize=False)
             if icon:
@@ -387,9 +389,10 @@ def structure_dialog(host, d: dict, title: str):
 
 # ------------------------------------------------------------------ page
 
-def build_page(be, local: bool = False):
+def build_page(be, local: bool = False, embedded: bool = False):
     """The whole UI for one backend ``be`` (this computer or a server over SSH): it never touches keys, datasets,
-    jobs or files itself, only asks ``be`` (see service.py)."""
+    jobs or files itself, only asks ``be`` (see service.py). ``embedded``: shown in a tab of the connect page,
+    whose top bar has the Tour button."""
     apply_theme()
     # a failure in any handler must not break the page: say so and carry on
     ui.on_exception(lambda e: ui.notify(f"Something went wrong: {type(e).__name__}: {e}", type="negative"))
@@ -419,12 +422,15 @@ def build_page(be, local: bool = False):
                 ui.label("EDH Downloader").classes("edh-brand").props("role=heading aria-level=1")
                 ui.label(f"Earth Data Hub datasets → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
         with ui.tabs().props("no-caps dense indicator-color=transparent active-class=edh-tab-active"
-                             ).classes("edh-tabs") as tabs:
-            t_new = ui.tab("New job", icon="add_circle_outline")
-            t_jobs = ui.tab("Jobs", icon="dns")
-            t_keys = ui.tab("Keys", icon="vpn_key")
+                             ).classes("edh-tabs edh-tour-tabs") as tabs:
+            t_new = ui.tab("New job", icon="add_circle_outline").classes("edh-tour-tab-new")
+            t_jobs = ui.tab("Jobs", icon="dns").classes("edh-tour-tab-jobs")
+            t_keys = ui.tab("Keys", icon="vpn_key").classes("edh-tour-tab-keys")
         with ui.row().classes("items-center gap-3 no-wrap max-sm:w-full"):
-            with ui.column().classes("gap-1 items-end min-w-0 max-sm:grow"):
+            if not embedded:
+                ui.button("Tour", icon="school", on_click=lambda: run_tour()).props(
+                    "flat dense no-caps size=sm color=grey-5").tooltip("a guided tour of the app")
+            with ui.column().classes("gap-1 items-end min-w-0 max-sm:grow edh-tour-quota"):
                 with ui.row().classes("items-center gap-1 no-wrap"):
                     quota_label = ui.label().classes("text-caption")
                     quota_label.on("click", lambda: tabs.set_value(t_keys) if not f.get("key") else None)
@@ -514,7 +520,7 @@ def build_page(be, local: bool = False):
                 with ui.element("div").classes("grid grid-cols-2 max-xl:grid-cols-1 gap-5 grow min-w-0 content-start"):
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- dataset
-                        with section(1, "Dataset", icon="dataset"):
+                        with section(1, "Dataset", icon="dataset", mark="dataset"):
                             with ui.row().classes("w-full items-center gap-3 no-wrap max-sm:flex-wrap"):
                                 coll_select = ui.select({"era5": "ERA5"}, value="era5", label="Collection").classes("w-48")
                                 ds_select = ui.select({}, label="Dataset", with_input=True).classes(
@@ -529,7 +535,7 @@ def build_page(be, local: bool = False):
                             ds_info = ui.markdown().classes("text-body2 edh-muted")
 
                         # ---------- variables
-                        with section(2, "Variables and levels", icon="layers"):
+                        with section(2, "Variables and levels", icon="layers", mark="variables"):
                             with ui.row().classes("w-full items-center justify-between"):
                                 var_search = ui.input(placeholder="Search variables…").props("dense outlined clearable").classes("w-80")
                                 with var_search.add_slot("prepend"):
@@ -552,7 +558,7 @@ def build_page(be, local: bool = False):
 
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- time
-                        with section(3, "Time", icon="date_range"):
+                        with section(3, "Time", icon="date_range", mark="time"):
                             with ui.row().classes("items-center gap-4"):
                                 for key_, label, hkey in (("start", "First day", "start_hour"), ("end", "Last day", "end_hour")):
                                     with ui.input(label).bind_value(f, key_).classes("w-44") as inp:
@@ -588,7 +594,7 @@ def build_page(be, local: bool = False):
                             stats_box = ui.column().classes("gap-2")
 
                         # ---------- area
-                        with section(4, "Area", icon="map"):
+                        with section(4, "Area", icon="map", mark="area"):
                             with ui.row().classes("items-center gap-5"):
                                 IconToggle({"global": ("Global", "public"), "bbox": ("Box", "crop_free"),
                                             "points": ("Points", "place")}).bind_value(
@@ -633,7 +639,7 @@ def build_page(be, local: bool = False):
                                     "attribution": "&copy; OpenStreetMap contributors", "maxZoom": 19})
 
                     # ---------- output
-                    with section(5, "Output", wide=True, icon="folder"):
+                    with section(5, "Output", wide=True, icon="folder", mark="output"):
                         with ui.row().classes("w-full items-center justify-between pb-2 mb-2 border-b border-white/10"):
                             with ui.row().classes("items-center gap-2"):
                                 ui.label("Store mode").classes("text-body2 text-weight-medium")
@@ -752,7 +758,8 @@ def build_page(be, local: bool = False):
                         enc_box.bind_visibility_from(f, "out_format", lambda v: v != "icechunk")
 
                 # ---------- summary (sticky)
-                with ui.card().classes("edh-card edh-summary w-[26rem] max-lg:w-full sticky shrink-0 edh-scroll").style(
+                with ui.card().classes("edh-card edh-summary edh-tour-summary w-[26rem] max-lg:w-full sticky shrink-0 "
+                                       "edh-scroll").style(
                         "top:80px;max-height:calc(100vh - 100px);overflow-y:auto"):
                     ui.label("Summary").classes("edh-title")
                     summary = ui.column().classes("gap-3 w-full")
@@ -762,14 +769,14 @@ def build_page(be, local: bool = False):
                             "Chunks downloaded at the same time. Faster up to what your line and the server "
                             "allow; the sample suggests a value. Can be changed while the job runs.")
                         conn_hint = ui.column().classes("gap-0 grow")
-                    with ui.row().classes("w-full items-center gap-2 no-wrap"):
+                    with ui.row().classes("w-full items-center gap-2 no-wrap edh-tour-sample"):
                         sample_btn = ui.button(f"Measure on a sample · {SAMPLE_REQUESTS} requests", icon="science").props(
                             "outline no-caps color=secondary").classes("grow")
                         tip(f"Uses quota: downloads {SAMPLE_REQUESTS} chunks of this selection ({SAMPLE_REQUESTS} requests) to "
                             "measure the real download size, your line speed and the Zarr size with your encoding. "
                             "Then suggests the number of connections.")
                     sample_status = ui.label().classes("edh-muted text-caption")
-                    with ui.expansion("Download settings", icon="tune").classes("edh-expansion w-full"):
+                    with ui.expansion("Download settings", icon="tune").classes("edh-expansion w-full edh-tour-settings"):
                         with ui.column().classes("w-full gap-3 p-2"):
                             with_tip(ui.input("Temporary directory", placeholder="job folder").bind_value(
                                 f, "spool_dir").classes("w-full"),
@@ -794,21 +801,22 @@ def build_page(be, local: bool = False):
                             with ui.row().classes("items-center gap-1 no-wrap"):
                                 ui.switch("Wait for quota reset").bind_value(f, "wait_for_quota")
                                 tip("At the limit: wait for the reset on the 1st and continue. Off: pause the job.")
-                    launch_btn = ui.button("Launch job", icon="rocket_launch").props("unelevated no-caps size=lg").classes(
-                        "edh-grad-btn w-full")
-                    ui.button("Download job.json", icon="file_download", on_click=lambda: save_job_file()).props(
-                        "outline no-caps color=white").classes("w-full")
+                    with ui.column().classes("w-full gap-3 edh-tour-launch"):
+                        launch_btn = ui.button("Launch job", icon="rocket_launch").props(
+                            "unelevated no-caps size=lg").classes("edh-grad-btn w-full")
+                        ui.button("Download job.json", icon="file_download", on_click=lambda: save_job_file()).props(
+                            "outline no-caps color=white").classes("w-full")
                     ui.label("Runs in the background: you can close this page.").classes("edh-muted text-caption")
 
         # ================================================================ JOBS
-        with ui.tab_panel(t_jobs).classes("px-0"):
+        with ui.tab_panel(t_jobs).classes("px-0 edh-tour-jobs"):
             ui.label("Jobs").classes("sr-only").props("role=heading aria-level=2")
             jobs_rollup = ui.html("", sanitize=False).classes("text-body2 pb-3")
             jobs_announce = ui.label("").classes("sr-only").props("role=status aria-live=polite")
             jobs_box = ui.column().classes("w-full gap-4")
 
         # ================================================================ KEYS
-        with ui.tab_panel(t_keys).classes("px-0"):
+        with ui.tab_panel(t_keys).classes("px-0 edh-tour-keys"):
             keys_box = ui.column().classes("w-full gap-4 max-w-5xl mx-auto")
 
     # ------------------------------------------------------------------ dataset loading
@@ -1742,7 +1750,7 @@ def build_page(be, local: bool = False):
         default = d["default"]
         keys_box.clear()
         with keys_box:
-            with section("+", "Add an API key"):
+            with section("+", "Add an API key", mark="keys-add"):
                 ui.markdown("Get a key on the [Earth Data Hub API keys page](https://earthdatahub.destine.eu/"
                             "quota-api-keys). It is stored on the machine that runs the downloads, in "
                             "`~/.config/edh-dl/keys.json` (only you can read it); `~/.netrc` is used automatically."
@@ -1853,6 +1861,28 @@ def build_page(be, local: bool = False):
 
     ui.timer(0.1, start, once=True)
     ui.timer(30, refresh_quota)
+
+    # ------------------------------------------------------------------ guided tour
+    def run_tour():
+        where = "this computer" if local else getattr(be, "name", "") or "the server"
+        hint = ("Replay this tour any time from <b>Tour</b> in the top bar." if embedded else
+                "Replay this tour any time from the <b>Tour</b> button in the header.")
+        tour.run("app", tour.app_steps(where, SAMPLE_REQUESTS, hint))
+
+    tour.install(lambda name, result: tour.set_stage(tour.DONE) if name == "app" else None)
+    ui.on(tour.START_EVENT, lambda: run_tour())  # the connect page's Tour button, from the top bar
+    ui.add_body_html(f"<script>window.edhRequestTour = () => emitEvent('{tour.START_EVENT}');</script>")
+    stage = tour.stage()
+    if stage == tour.APP or (stage == tour.WELCOME and not embedded):
+        def first_tour():
+            if stage == tour.APP:  # the connect part was followed: carry on straight away
+                tour.set_stage(tour.DONE)
+                run_tour()
+            else:  # edh-dl serve / connect: no connect page, so offer the tour here
+                tour.welcome(on_start=run_tour, on_skip=lambda: tour.set_stage(tour.DONE), connect=False,
+                             replay="the Tour button in the header")
+
+        later(first_tour, 0.8)
 
 
 def _mb(mb: float) -> str:

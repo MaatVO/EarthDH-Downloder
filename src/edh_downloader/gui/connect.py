@@ -17,6 +17,7 @@ from fastapi.responses import PlainTextResponse
 from nicegui import Client, app, ui
 
 from .. import __version__, backend, remote, sshconfig
+from . import tour
 from .theme import apply_theme
 
 # one user, one app: the open connections outlive page reloads
@@ -80,14 +81,16 @@ def build_connect_page():
         with ui.row().classes("edh-ctabs gap-1 no-wrap items-center"):
             tabs()
         ui.space()
+        ui.button("Tour", icon="school", on_click=lambda: start_tour()).props(
+            "flat dense no-caps size=sm color=grey-5").tooltip("a guided tour of this page")
         ui.button("Quit", icon="power_settings_new", on_click=lambda: ask_quit()).props(
             "flat dense no-caps size=sm color=grey-5").tooltip(
             "closes the app and its connections; download jobs keep running")
 
     def frame(key, url):  # under ``frames`` whatever the calling context (a button, a dialog …)
         with frames:
-            panes[key] = ui.element("iframe").props(f'src="{url}" allow="clipboard-write"').classes(
-                "edh-remote-frame")
+            panes[key] = ui.element("iframe").props(
+                f'src="{url}" allow="clipboard-write" id="edh-frame-{key}"').classes("edh-remote-frame")
 
     with ui.element("div").classes("edh-pane") as form_pane:
         panes["new"] = form_pane
@@ -182,6 +185,38 @@ def build_connect_page():
     ui.timer(2.0, watch)
     select(STATE["active"])
 
+    # ---- guided tour: this page explains connecting; the app tab opened next explains the rest
+    def app_tabs():
+        return [k for k in panes if k != "new"]
+
+    def start_tour():
+        if STATE["active"] != "new":  # on a server's (or This computer's) tab: the tour of that tab
+            app_tour(STATE["active"])
+            return
+        tour.run("connect", tour.connect_steps(apps_open=bool(app_tabs())))
+
+    def app_tour(key):
+        select(key)
+        ui.run_javascript(f"""(() => {{
+            const w = document.getElementById('edh-frame-{key}')?.contentWindow;
+            if (w && w.edhRequestTour) w.edhRequestTour();
+        }})()""")
+
+    def ended(name, result):
+        if name != "connect":
+            return
+        if result == "done" and app_tabs():
+            app_tour(app_tabs()[-1])
+        elif result == "done":
+            tour.set_stage(tour.APP)  # the next app tab opened carries on
+        elif tour.stage() != tour.DONE:
+            tour.set_stage(tour.DONE)
+
+    tour.install(ended)
+    if tour.stage() == tour.WELCOME:
+        tour.welcome(on_start=start_tour, on_skip=lambda: tour.set_stage(tour.DONE), connect=True,
+                     replay="Tour in the top bar")
+
 
 async def _quit():
     for sess in list(STATE["sessions"].values()):
@@ -223,7 +258,7 @@ def _connect_form(on_connected, open_local):
                 ui.label(f"v{__version__} · connect to the server that downloads and stores your data").classes(
                     "edh-muted text-caption")
         with ui.row().classes("w-full gap-5 items-start no-wrap max-md:flex-wrap"):
-            with ui.card().classes("edh-card grow min-w-0"):
+            with ui.card().classes("edh-card grow min-w-0 edh-tour-ssh"):
                 ui.label("Connect over SSH").classes("edh-title")
                 ui.label("Jobs, downloads, files, API keys and quota all live on the server. This window only "
                          "shows its interface.").classes("edh-muted text-body2")
@@ -234,8 +269,8 @@ def _connect_form(on_connected, open_local):
 
                     ui.select({a: _preset_label(x) for a, x in presets.items()}, label="From ~/.ssh/config",
                               with_input=True, on_change=pick).props("outlined dense options-dense").classes(
-                        "w-full").bind_value_from(form, "host", lambda h: h if h in presets else None)
-                with ui.row().classes("w-full gap-3 no-wrap max-sm:flex-wrap"):
+                        "w-full edh-tour-preset").bind_value_from(form, "host", lambda h: h if h in presets else None)
+                with ui.row().classes("w-full gap-3 no-wrap max-sm:flex-wrap edh-tour-host"):
                     ui.input("Server", placeholder="hpc.example.org or an ~/.ssh/config alias").bind_value(
                         form, "host").classes("grow")
                     ui.input("User", placeholder="from config").bind_value(form, "user").classes("w-40")
@@ -245,7 +280,7 @@ def _connect_form(on_connected, open_local):
                     "edh-muted text-caption edh-mono").bind_visibility_from(
                     form, "host", lambda h: (h or "").strip() in presets)
                 ui.toggle({"key": "SSH key / agent", "password": "Password"}).bind_value(form, "auth").props(
-                    "no-caps unelevated toggle-color=primary").classes("edh-toggle")
+                    "no-caps unelevated toggle-color=primary").classes("edh-toggle edh-tour-auth")
                 with ui.row().classes("w-full gap-3 no-wrap max-sm:flex-wrap") as key_row:
                     ui.input("Key file", placeholder="default: agent, ~/.ssh/id_ed25519, id_rsa …").bind_value(
                         form, "key_file").classes("grow")
@@ -259,33 +294,34 @@ def _connect_form(on_connected, open_local):
                     with ui.row().classes("w-full gap-3 no-wrap max-sm:flex-wrap"):
                         pass
                         ui.input("Name for this server").bind_value(form, "label").classes("w-56")
-                with ui.row().classes("w-full items-center justify-between"):
+                with ui.row().classes("w-full items-center justify-between edh-tour-connect"):
                     ui.switch("Remember this server (never the password)").bind_value(form, "remember")
                     btn = ui.button("Connect", icon="login").props("unelevated no-caps").classes(
                         "edh-grad-btn px-6")
                 status = ui.column().classes("w-full gap-0 edh-mono text-caption")
 
             with ui.column().classes("w-80 max-md:w-full gap-3 shrink-0"):
-                ui.label("Servers").classes("edh-subtitle")
-                if not servers:
-                    ui.label("Servers you connect to are listed here.").classes("edh-muted text-caption")
-                for s in servers:
-                    with ui.card().classes("edh-card w-full gap-1 py-3") as card:
-                        with ui.row().classes("w-full items-center justify-between no-wrap"):
-                            with ui.column().classes("gap-0 min-w-0"):
-                                ui.label(s.name).classes("edh-mono text-weight-medium ellipsis")
-                                ui.label(f"{s.user + '@' if s.user else ''}{s.host}"
-                                         f"{':' + str(s.port) if s.port else ''}").classes(
-                                    "edh-muted text-caption ellipsis")
-                            with ui.row().classes("gap-0 no-wrap"):
-                                ui.button(icon="login", on_click=lambda s=s: use(s, go=True)).props(
-                                    "flat round color=secondary").tooltip("connect")
-                                ui.button(icon="edit", on_click=lambda s=s: use(s)).props("flat round").tooltip(
-                                    "fill the form")
-                                ui.button(icon="delete_outline", on_click=lambda s=s, c=card: (
-                                    remote.forget(s), c.delete())).props("flat round color=grey-6").tooltip("forget")
+                with ui.column().classes("w-full gap-3 edh-tour-servers"):
+                    ui.label("Servers").classes("edh-subtitle")
+                    if not servers:
+                        ui.label("Servers you connect to are listed here.").classes("edh-muted text-caption")
+                    for s in servers:
+                        with ui.card().classes("edh-card w-full gap-1 py-3") as card:
+                            with ui.row().classes("w-full items-center justify-between no-wrap"):
+                                with ui.column().classes("gap-0 min-w-0"):
+                                    ui.label(s.name).classes("edh-mono text-weight-medium ellipsis")
+                                    ui.label(f"{s.user + '@' if s.user else ''}{s.host}"
+                                             f"{':' + str(s.port) if s.port else ''}").classes(
+                                        "edh-muted text-caption ellipsis")
+                                with ui.row().classes("gap-0 no-wrap"):
+                                    ui.button(icon="login", on_click=lambda s=s: use(s, go=True)).props(
+                                        "flat round color=secondary").tooltip("connect")
+                                    ui.button(icon="edit", on_click=lambda s=s: use(s)).props("flat round").tooltip(
+                                        "fill the form")
+                                    ui.button(icon="delete_outline", on_click=lambda s=s, c=card: (
+                                        remote.forget(s), c.delete())).props("flat round color=grey-6").tooltip("forget")
                 ui.label("Or").classes("edh-subtitle q-mt-sm")
-                with ui.card().classes("edh-card w-full gap-2 py-3"):
+                with ui.card().classes("edh-card w-full gap-2 py-3 edh-tour-local"):
                     with ui.row().classes("w-full items-center justify-between no-wrap"):
                         with ui.column().classes("gap-0 min-w-0"):
                             ui.label("This computer").classes("text-weight-medium")
@@ -397,13 +433,13 @@ def serve_local(port: int = 0, open_browser: bool = True):
         if not sess or sess.closed:
             ui.label("this connection is closed")
             return
-        build_page(sess.backend)
+        build_page(sess.backend, embedded=True)
 
     @ui.page("/local")
     def local():
         from .app import build_page
 
-        build_page(backend.Local(), local=True)
+        build_page(backend.Local(), local=True, embedded=True)
 
     async def close():
         for sess in list(STATE["sessions"].values()):

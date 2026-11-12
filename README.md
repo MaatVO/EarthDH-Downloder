@@ -214,6 +214,8 @@ edh-dl
 
 ## Getting Started
 
+The first time you open the application, it offers a short guided tour of the whole procedure, from the SSH connection to the download. You can skip it, and replay it at any time from **Tour** in the top bar.
+
 ### 1. Configure your Earth Data Hub API key
 
 Obtain an API key from [Earth Data Hub](https://earthdatahub.destine.eu/).
