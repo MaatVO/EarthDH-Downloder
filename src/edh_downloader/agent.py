@@ -11,8 +11,6 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from . import service
-
 
 def encode(o):
     """json ``default``: numpy scalars/arrays, paths, sets, anything else as text."""
@@ -35,6 +33,8 @@ def dumps(o) -> str:
 
 
 def main():
+    from . import service  # here, not at the top: the app imports dumps() without the download machinery
+
     out = os.fdopen(os.dup(1), "w", buffering=1)
     sys.stdout = sys.stderr  # stray prints must not corrupt the protocol
     lock = threading.Lock()

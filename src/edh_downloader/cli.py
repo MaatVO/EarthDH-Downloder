@@ -88,7 +88,7 @@ def main(argv=None):
         if not a.no_update:
             from . import update
 
-            update.auto_update(sys.argv[1:] if argv is None else list(argv))
+            update.auto_update()
         from .gui.connect import serve_local
 
         return serve_local(getattr(a, "port", 0), open_browser=not getattr(a, "no_browser", False))

@@ -1,9 +1,10 @@
 """Self-update of the packaged executable from the latest GitHub release.
 
-Every start of the app (``edh-dl`` / ``edh-dl app``) asks GitHub for the latest release. If it is newer than this
-build, the matching executable is downloaded, checked against the release's ``.sha256`` file, swapped in place of
-the running one and started again with the same arguments. Anything that goes wrong (offline, no permission to
-write next to the executable, unknown platform, ...) is reported in one line and the current version just starts.
+Every start of the app (``edh-dl`` / ``edh-dl app``) asks GitHub for the latest release, in the background while
+the app starts. If it is newer than this build, the matching executable is downloaded, checked against the
+release's ``.sha256`` file and swapped in place of the running one, which carries on; the new version runs from the
+next start. Anything that goes wrong (offline, no permission to write next to the executable, unknown platform,
+...) is reported in one line and nothing changes.
 
 Only the packaged executable updates itself; running from source / ``uv tool install`` never does.
 Opt out with ``--no-update`` or ``EDH_DL_NO_UPDATE=1``. ``edh-dl update`` does the same on demand.
@@ -14,9 +15,10 @@ import json
 import os
 import platform
 import re
-import subprocess
 import sys
 import tempfile
+import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -24,7 +26,6 @@ from . import __version__
 
 REPO = "MaatVO/EarthDH-Downloder"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
-RESTARTED = "EDH_DL_UPDATED"  # set for the restarted process: never update twice in a row
 
 
 def parse(v: str) -> tuple[int, ...]:
@@ -124,17 +125,44 @@ def check_and_update(force_notice: bool = False) -> bool:
     return True
 
 
-def auto_update(argv: list[str]) -> None:
-    """Called at startup. If an update was installed, runs the new version and exits with its status."""
-    if os.environ.get("EDH_DL_NO_UPDATE") or os.environ.get(RESTARTED) or not can_self_update():
-        return
-    if sys.platform == "win32":
-        Path(sys.executable).with_name(Path(sys.executable).name + ".old").unlink(missing_ok=True)
-    if not check_and_update():
-        return
-    env = dict(os.environ, **{RESTARTED: "1", "PYINSTALLER_RESET_ENVIRONMENT": "1"})  # fresh onefile unpack
+def is_local_build(version: str | None = None) -> bool:
+    """A build made on a developer's machine (packaging/build.sh without a release number): '0.2.0+local'."""
+    return (version or __version__).endswith("+local")
+
+
+UPDATED: str | None = None  # the version installed in the background, which runs from the next start
+
+
+def _clean_leftovers(exe: Path) -> None:
+    """Remove what an interrupted update or a replaced Windows executable left next to ``exe``."""
+    old = exe.with_name(exe.name + ".old")
+    stale = [p for p in exe.parent.glob(".edh-dl-new-*") if time.time() - p.stat().st_mtime > 3600]
+    for p in [old, *stale]:
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:  # still running (another window of the old version), or not ours to delete
+            pass
+
+
+def _update_in_background() -> None:
+    global UPDATED
     try:
-        rc = subprocess.call([sys.executable, *argv], env=env)
-    except KeyboardInterrupt:
-        rc = 130
-    sys.exit(rc)
+        info = latest(timeout=10)
+        if not info or not is_newer(info["version"]):
+            return
+        install(info, Path(sys.executable))
+    except Exception as e:  # offline, rate-limited, read-only folder …: this version just keeps running
+        print(f"(update check: {e})", flush=True)
+        return
+    UPDATED = info["version"]
+    print(f"edh-dl {UPDATED} is downloaded: it starts next time you open the app.", flush=True)
+
+
+def auto_update() -> None:
+    """Called at startup: looks for a newer release in the background, so the start is never delayed. A newer
+    executable is downloaded, verified and swapped in place of this one (the running program is unaffected); it
+    runs from the next start. Local builds never update themselves here (``edh-dl update`` still can)."""
+    if os.environ.get("EDH_DL_NO_UPDATE") or not can_self_update() or is_local_build():
+        return
+    _clean_leftovers(Path(sys.executable))
+    threading.Thread(target=_update_in_background, name="edh-dl-update", daemon=True).start()

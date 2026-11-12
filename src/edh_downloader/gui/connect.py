@@ -9,14 +9,17 @@ separate processes and keep running, here or on the servers, and show up again i
 
 import asyncio
 import json
+import importlib
 import secrets
 import socket
+import threading
+import time
 
 import asyncssh
 from fastapi.responses import PlainTextResponse
 from nicegui import Client, app, ui
 
-from .. import __version__, backend, remote, sshconfig
+from .. import __version__, backend, remote, sshconfig, update
 from . import tour
 from .theme import apply_theme
 
@@ -181,6 +184,10 @@ def build_connect_page():
                 ui.notify(f"connection to {sess.server.name} closed; download jobs keep running there. "
                           "Connect again to see them.", type="warning", timeout=0, close_button=True)
                 asyncio.create_task(close(sid))
+        if update.UPDATED and not STATE.get("update_told"):  # downloaded in the background since the start
+            STATE["update_told"] = True
+            ui.notify(f"EDH Downloader {update.UPDATED} is downloaded. It starts next time you open the app; "
+                      "download jobs are not affected.", type="info", timeout=0, close_button=True)
 
     ui.timer(2.0, watch)
     select(STATE["active"])
@@ -413,6 +420,17 @@ def _connect_form(on_connected, open_local):
     btn.on_click(lambda: connect())
 
 
+def _warm_up(delay: float = 1.5):
+    """While the connect page is on screen: import the app's interface and the download machinery (pandas, zarr,
+    icechunk …, ~1 s), so the first server tab or This computer opens without that wait."""
+    time.sleep(delay)  # the connect page first
+    for name in ("edh_downloader.gui.app", "edh_downloader.service"):
+        try:
+            importlib.import_module(name)
+        except Exception:  # noqa: BLE001 - the page that needs it imports it again and reports the problem
+            pass
+
+
 def serve_local(port: int = 0, open_browser: bool = True):
     from .auth import TokenMiddleware
 
@@ -446,6 +464,7 @@ def serve_local(port: int = 0, open_browser: bool = True):
             await sess.close()
 
     app.on_shutdown(close)
+    app.on_startup(lambda: threading.Thread(target=_warm_up, name="edh-dl-warm-up", daemon=True).start())
     path = f"/?token={tok}"
     print("EDH Downloader (connects to a server over SSH)")
     print(f"  http://localhost:{port}{path}")

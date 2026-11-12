@@ -6,7 +6,6 @@ Both expose ``await call(method, **kwargs)`` with the functions of ``service`` a
 import asyncio
 import json
 
-from . import service
 from .agent import dumps
 
 
@@ -18,11 +17,14 @@ class Local:
     name = "This computer"
 
     def __init__(self):
+        from . import service  # pandas, zarr, icechunk …: loaded when this computer is used, not at startup
+
+        self._service = service
         self.info = service.hello()
         self.closed = False
 
     async def call(self, method: str, on_event=None, **kw):
-        fn = service.METHODS[method]
+        fn = self._service.METHODS[method]
         loop = asyncio.get_running_loop()
         if on_event and "emit" in fn.__code__.co_varnames[: fn.__code__.co_argcount]:
             kw["emit"] = lambda ev: loop.call_soon_threadsafe(on_event, json.loads(dumps(ev)))
