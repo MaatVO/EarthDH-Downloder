@@ -48,13 +48,15 @@ def main(argv=None):
     ks = k.add_subparsers(dest="kcmd", required=True)
     ks.add_parser("list")
     x = ks.add_parser("add"); x.add_argument("name"); x.add_argument("--quota", type=int, default=500_000)
+    x.add_argument("--source", choices=["edh", "cds"], default="edh",
+                   help="data source: edh = Earth Data Hub (default), cds = Copernicus Climate Data Store")
     x.add_argument("--default", action="store_true"); x.add_argument("--no-check", action="store_true")
     x = ks.add_parser("remove"); x.add_argument("name")
     x = ks.add_parser("default"); x.add_argument("name")
     x = ks.add_parser("quota", help="set the monthly request quota of a key"); x.add_argument("name"); x.add_argument("quota", type=int)
     x = ks.add_parser("calibrate", help="set this month's usage as shown on the EDH quota page")
     x.add_argument("name"); x.add_argument("used", type=int)
-    x = ks.add_parser("test", help="check a key (1 request)"); x.add_argument("name", nargs="?")
+    x = ks.add_parser("test", help="check a key (Earth Data Hub: 1 request; CDS: free)"); x.add_argument("name", nargs="?")
 
     x = sub.add_parser("datasets", help="list datasets of a collection"); x.add_argument("--collection", default="era5")
     x = sub.add_parser("variables", help="list variables of a dataset (a few requests, cached)")
@@ -112,24 +114,30 @@ def main(argv=None):
         sys.stdout.write(script(a.kind, a.host))
         return
     if a.cmd == "keys":
-        from . import keys, quota
+        from . import keys, quota, sources
 
         if a.kcmd == "list":
-            d = keys.default_name()
+            defaults = {p: keys.default_name(p) for p in sources.SOURCES}
             for key in keys.list_keys():
-                q = quota.info(key.fingerprint)
-                print(f"{'*' if key.name == d else ' '} {key.name:<16} {key.source:<7} id {key.fingerprint}  "
-                      f"used {q['used']}/{key.quota} this month")
+                star = "*" if defaults.get(key.provider) == key.name else " "
+                use = ""
+                if sources.get(key.provider).has_quota:
+                    q = quota.info(key.fingerprint)
+                    use = f"  used {q['used']}/{key.quota} this month"
+                print(f"{star} {key.name:<16} {key.provider:<4} {key.source:<8} id {key.fingerprint}{use}")
         elif a.kcmd == "add":
-            print("Get a free Earth Data Hub API key at: https://earthdatahub.destine.eu/quota-api-keys")
+            src = sources.get(a.source)
+            print(f"Get a {src.title} API key at: {src.key_url}")
             secret = getpass.getpass("API key: ")
             if not a.no_check:
-                ok, msg = asyncio.run(keys.validate(secret))
+                ok, msg = asyncio.run(keys.validate(secret, src.id))
                 print(msg)
                 if not ok:
                     sys.exit(1)
-            keys.add_key(a.name, secret, a.quota, a.default)
-            print(f"saved key {a.name}")
+            keys.add_key(a.name, secret, a.quota, a.default, provider=src.id)
+            if not a.no_check and src.has_quota:
+                quota.add(keys.fingerprint(secret.strip()), 1)
+            print(f"saved {src.short} key {a.name}")
         elif a.kcmd == "remove":
             keys.remove_key(a.name)
         elif a.kcmd == "default":
@@ -139,9 +147,10 @@ def main(argv=None):
         elif a.kcmd == "calibrate":
             quota.calibrate(keys.get_key(a.name).fingerprint, a.used)
         elif a.kcmd == "test":
-            key = keys.get_key(a.name)
-            ok, msg = asyncio.run(keys.validate(key.secret))
-            quota.add(key.fingerprint, 1)
+            key = keys.find_key(a.name) if a.name else keys.get_key()
+            ok, msg = asyncio.run(keys.validate(key.secret, key.provider))
+            if sources.get(key.provider).has_quota:
+                quota.add(key.fingerprint, 1)
             print(msg)
             sys.exit(0 if ok else 1)
         return
@@ -168,8 +177,10 @@ def main(argv=None):
         from .job import JobSpec
         from .planner import Plan
 
+        from . import sources
+
         spec = JobSpec.load(a.job_file)
-        key = keys.get_key(spec.download.key)
+        key = keys.get_key(spec.download.key, sources.require_jobs(spec.source).id)
         info = catalog.dataset_info(spec)
         ds = catalog.load_dataset(info["url"], key.secret, counter=RequestCounter(key.fingerprint), info=info)
         plan = Plan(spec, ds)
@@ -197,7 +208,11 @@ def main(argv=None):
     if a.cmd == "run":
         from .job import JobSpec
 
-        job = runner.create_job(JobSpec.load(a.job_file))
+        from . import sources
+
+        spec = JobSpec.load(a.job_file)
+        sources.require_jobs(spec.source)
+        job = runner.create_job(spec)
         print(f"job {job.name}")
         if a.detach:
             print(f"started in the background (pid {runner.launch(job)}); follow with: edh-dl log {job.name}")

@@ -104,7 +104,16 @@ class DownloadSpec:
 
 
 @dataclass
+class CdsSpec:
+    """Request options that only the Climate Data Store has (ignored for Earth Data Hub jobs)."""
+    grid: list[float] | None = None  # output grid spacing [dlat, dlon] in degrees, regridded by CDS; None = native
+    options: dict = field(default_factory=dict)  # other request fields of the dataset form (product_type, ...)
+    max_inflight: int = 4  # requests waiting or running on CDS at once (lowered automatically when CDS limits it)
+
+
+@dataclass
 class JobSpec:
+    source: str = "edh"  # data source id (see ``sources``); jobs written before sources existed are Earth Data Hub
     dataset: str = "era5-single-levels-atmosphere"
     collection: str = "era5"
     dataset_url: str | None = None  # filled from the catalogue when empty
@@ -114,6 +123,7 @@ class JobSpec:
     area: AreaSpec = field(default_factory=AreaSpec)
     output: OutputSpec = field(default_factory=OutputSpec)
     download: DownloadSpec = field(default_factory=DownloadSpec)
+    cds: CdsSpec = field(default_factory=CdsSpec)
     version: int = 1
 
     def to_dict(self) -> dict:
@@ -128,7 +138,7 @@ class JobSpec:
         a = dict(d.pop("area", None) or {})
         a["points"] = [_make(Point, p) for p in a.get("points") or []]
         return _make(cls, d, time=t, area=_make(AreaSpec, a), output=_make(OutputSpec, d.pop("output", None)),
-                     download=_make(DownloadSpec, d.pop("download", None)))
+                     download=_make(DownloadSpec, d.pop("download", None)), cds=_make(CdsSpec, d.pop("cds", None)))
 
     @classmethod
     def load(cls, path: str | Path) -> "JobSpec":

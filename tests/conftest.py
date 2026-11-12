@@ -94,6 +94,9 @@ def home(tmp_path, monkeypatch):
     for v, d in (("EDH_DL_CONFIG_DIR", "cfg"), ("EDH_DL_DATA_DIR", "data"), ("EDH_DL_CACHE_DIR", "cache")):
         monkeypatch.setenv(v, str(tmp_path / d))
     monkeypatch.setenv("NETRC", str(tmp_path / "no-netrc"))
+    monkeypatch.setenv("CDSAPI_RC", str(tmp_path / "no-cdsapirc"))  # never the user's real CDS token
+    monkeypatch.delenv("CDSAPI_URL", raising=False)
+    monkeypatch.delenv("CDSAPI_KEY", raising=False)
     from edh_downloader import keys
 
     keys.add_key("test", "test-key", quota=100_000)

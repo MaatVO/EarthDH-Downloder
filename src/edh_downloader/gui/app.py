@@ -196,6 +196,9 @@ OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"  # darkened wit
 
 DEFAULT_QUOTA = 500_000  # free DestinE access: requests per calendar month
 QUOTA_URL = "https://earthdatahub.destine.eu/quota-api-keys"
+EDH_SOURCE = {"id": "edh", "title": "Earth Data Hub", "short": "EDH", "key_url": QUOTA_URL, "has_quota": True,
+              "check_cost": "1 request", "jobs": True,
+              "key_hint": "`~/.netrc` (machine data.earthdatahub.destine.eu) is used automatically."}
 
 
 def parse_points(text: str) -> list[Point]:
@@ -461,7 +464,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
         if d is None:
             return
         ctx["keys"] = d
-        key_select.options = {k["name"]: k["name"] for k in d["keys"]}
+        key_select.options = {k["name"]: k["name"] for k in d["keys"] if k.get("provider", "edh") == "edh"}
         if f["key"] not in key_select.options:
             f["key"] = d["default"]
         key_select.value = f["key"]
@@ -1742,117 +1745,152 @@ def build_page(be, local: bool = False, embedded: bool = False):
                          refresh_key_list() if e.value in (t_keys, "Keys") else None)
 
     # ------------------------------------------------------------------ keys tab
+    async def sources_meta() -> list[dict]:
+        """The data sources the backend knows (only Earth Data Hub from a backend older than sources)."""
+        if not ctx.get("sources"):
+            try:
+                ctx["sources"] = await be.call("sources_list")
+            except BackendError:
+                return [EDH_SOURCE]
+        return ctx["sources"]
+
     async def refresh_key_list():
         d = await call("keys_list")
         if d is None:
             return
         ctx["keys"] = d
-        default = d["default"]
+        srcs = await sources_meta()
+        defaults = d.get("defaults") or {"edh": d["default"]}
         keys_box.clear()
         with keys_box:
-            with section("+", "Add an API key", mark="keys-add"):
-                ui.markdown("Get a key on the [Earth Data Hub API keys page](https://earthdatahub.destine.eu/"
-                            "quota-api-keys). It is stored on the machine that runs the downloads, in "
-                            "`~/.config/edh-dl/keys.json` (only you can read it); `~/.netrc` is used automatically."
-                            ).classes("text-body2 edh-muted")
-                with ui.row().classes("items-center gap-3 w-full no-wrap max-md:flex-wrap"):
-                    name_in = ui.input("Name", placeholder="personal").classes("w-44")
-                    key_in = ui.input("API key", password=True, password_toggle_button=True).classes("grow")
-                    q_in = ui.number("Monthly quota", value=DEFAULT_QUOTA, min=1).classes("w-44")
-                    chk = ui.switch("Check it (1 request)", value=True)
+            for src in srcs:
+                pid = src["id"]
+                with ui.row().classes("items-center gap-2 w-full pt-2"):
+                    ui.icon("hub", color="secondary")
+                    ui.label(src["title"]).classes("text-h6").props("role=heading aria-level=2")
+                    if not src.get("jobs", True):
+                        ui.label("downloads coming soon: keys can be added already").classes("edh-muted text-caption")
+                key_form(src)
+                mine = [k for k in d["keys"] if k.get("provider", "edh") == pid]
+                if not mine:
+                    ui.label(f"No {src['short']} key yet.").classes("edh-muted text-body2")
+                for k in mine:
+                    key_card(k, src, defaults.get(pid))
+                if src.get("has_quota", pid == "edh") and mine:
+                    ui.markdown("Earth Data Hub doesn't report your usage to API clients: the app counts its own "
+                                f"requests. Open the [quota page]({QUOTA_URL}), then enter the number shown there in "
+                                "**Calibrate** (includes requests from other tools), or the limit of your plan in "
+                                "**Set quota**.").classes("edh-muted text-caption")
 
-                    async def add():
-                        if q_in.value is None or q_in.value < 1:
-                            ui.notify("Monthly quota must be a positive number", type="warning")
-                            return
-                        r = await call("key_add", name=name_in.value or "", secret=key_in.value or "",
-                                       quota_=int(q_in.value), check=bool(chk.value))
-                        if r is None:
-                            return
-                        if not r["ok"]:
-                            ui.notify(r["msg"], type="negative")
-                            return
-                        ui.notify(f"saved key {r['name']}", type="positive")
+    def key_form(src: dict):
+        pid = src["id"]
+        quota_kept = src.get("has_quota", pid == "edh")
+        with section("+", "Add an API key", mark="keys-add" if pid == "edh" else ""):
+            ui.markdown(f"Get a key on [{src['key_url'].split('//')[-1].split('/')[0]}]({src['key_url']}). It is "
+                        "stored on the machine that runs the downloads, in `~/.config/edh-dl/keys.json` (only you "
+                        f"can read it); {src['key_hint']}").classes("text-body2 edh-muted")
+            with ui.row().classes("items-center gap-3 w-full no-wrap max-md:flex-wrap"):
+                name_in = ui.input("Name", placeholder="personal").classes("w-44")
+                key_in = ui.input("API key" if quota_kept else "Personal access token", password=True,
+                                  password_toggle_button=True).classes("grow")
+                q_in = ui.number("Monthly quota", value=DEFAULT_QUOTA, min=1).classes("w-44") if quota_kept else None
+                chk = ui.switch(f"Check it ({src.get('check_cost', '1 request')})", value=True)
+
+                async def add():
+                    if q_in is not None and (q_in.value is None or q_in.value < 1):
+                        ui.notify("Monthly quota must be a positive number", type="warning")
+                        return
+                    r = await call("key_add", name=name_in.value or "", secret=key_in.value or "",
+                                   quota_=int(q_in.value) if q_in is not None else None, check=bool(chk.value),
+                                   **({} if pid == "edh" else {"provider": pid}))
+                    if r is None:
+                        return
+                    if not r["ok"]:
+                        ui.notify(r["msg"], type="negative")
+                        return
+                    ui.notify(f"saved key {r['name']}", type="positive")
+                    await refresh_key_list()
+                    await refresh_keys_select()
+
+                ui.button("Add", icon="add", on_click=add).props("unelevated no-caps").classes("edh-grad-btn")
+
+    def key_card(k: dict, src: dict, default: str | None):
+        with ui.card().classes("edh-card w-full"):
+            with ui.row().classes("w-full items-center justify-between"):
+                with ui.row().classes("items-center gap-2"):
+                    ui.icon("vpn_key", color="secondary")
+                    ui.label(k["name"]).classes("text-h6")
+                    ui.label(f"{'default · ' if k['name'] == default else ''}{k['source']} · id {k['fingerprint']}"
+                             ).classes("edh-muted text-caption")
+                with ui.row().classes("gap-1"):
+                    if k["name"] != default:
+                        async def make_default(n=k["name"]):
+                            await call("key_default", name=n)
+                            await refresh_key_list()
+                            await refresh_keys_select()
+
+                        ui.button("Make default", on_click=make_default).props("flat no-caps")
+
+                    async def test(n=k["name"]):
+                        r = await call("key_test", name=n)
+                        if r:
+                            ui.notify(r["msg"], type="positive" if r["ok"] else "negative")
                         await refresh_key_list()
-                        await refresh_keys_select()
 
-                    ui.button("Add", icon="add", on_click=add).props("unelevated no-caps").classes("edh-grad-btn")
-            for k in d["keys"]:
-                q = k["usage"]
-                with ui.card().classes("edh-card w-full"):
-                    with ui.row().classes("w-full items-center justify-between"):
-                        with ui.row().classes("items-center gap-2"):
-                            ui.icon("vpn_key", color="secondary")
-                            ui.label(k["name"]).classes("text-h6")
-                            ui.label(f"{'default · ' if k['name'] == default else ''}{k['source']} · id {k['fingerprint']}"
-                                     ).classes("edh-muted text-caption")
-                        with ui.row().classes("gap-1"):
-                            if k["name"] != default:
-                                async def make_default(n=k["name"]):
-                                    await call("key_default", name=n)
-                                    await refresh_key_list()
-                                    await refresh_keys_select()
-
-                                ui.button("Make default", on_click=make_default).props("flat no-caps")
-
-                            async def test(n=k["name"]):
-                                r = await call("key_test", name=n)
-                                if r:
-                                    ui.notify(r["msg"], type="positive" if r["ok"] else "negative")
-                                await refresh_key_list()
-
-                            ui.button("Test", icon="check_circle_outline", on_click=test).props("flat no-caps")
-                            if k["source"] == "stored":
-                                async def remove(n=k["name"]):
-                                    await call("key_remove", name=n)
-                                    await refresh_key_list()
-                                    await refresh_keys_select()
-
-                                ui.button(icon="delete_outline", on_click=lambda n=k["name"]: confirm(
-                                    f"Remove key {n}?", lambda n=n: remove(n))).props('flat round color=grey-6 aria-label="Remove key"').tooltip(
-                                    "Remove key")
-                    pct = q["used"] / k["quota"] if k["quota"] else 0
-                    with ui.row().classes("w-full items-center gap-6 no-wrap"):
-                        ui.circular_progress(value=min(1, pct), show_value=False, size="64px",
-                                             color="negative" if pct > 0.9 else "warning" if pct > 0.7 else "secondary").props(
-                            "thickness=0.2 track-color=grey-9")
-                        with ui.column().classes("gap-0"):
-                            ui.label(f"{q['used']:,} / {k['quota']:,}").classes("edh-kpi-value")
-                            ui.label(f"requests used in {q['month']} · this app {q['app']:,} · "
-                                     + (f"calibrated {q['calibrated_at'][:16]}" if q["calibrated_at"] else "not calibrated")
-                                     + f" · resets {q['resets'][:10]}").classes("edh-muted text-caption")
-                    with ui.row().classes("items-center gap-3"):
-                        ui.button("Check on Earth Data Hub", icon="open_in_new",
-                                  on_click=lambda: ui.navigate.to(QUOTA_URL, new_tab=True)).props(
-                            "unelevated no-caps").classes("edh-grad-btn")
-                        used_in = ui.number("Used, as shown on the EDH quota page", min=0).classes("w-80")
-
-                        async def calibrate(u=used_in, n=k["name"]):
-                            if u.value is None or u.value < 0:
-                                ui.notify("Enter the number shown on the Earth Data Hub quota page", type="warning")
-                                return
-                            if await call("key_calibrate", name=n, used=int(u.value)) is None:
-                                return
+                    ui.button("Test", icon="check_circle_outline", on_click=test).props("flat no-caps").tooltip(
+                        f"check the key ({src.get('check_cost', '1 request')})")
+                    if k["source"] == "stored":
+                        async def remove(n=k["name"]):
+                            await call("key_remove", name=n)
                             await refresh_key_list()
-                            await refresh_quota()
-                            ui.notify("calibrated")
+                            await refresh_keys_select()
 
-                        ui.button("Calibrate", on_click=calibrate).props("outline no-caps color=secondary")
-                        quota_in = ui.number("Monthly quota", value=k["quota"], min=1).classes("w-44")
+                        ui.button(icon="delete_outline", on_click=lambda n=k["name"]: confirm(
+                            f"Remove key {n}?", lambda n=n: remove(n))).props('flat round color=grey-6 aria-label="Remove key"').tooltip(
+                            "Remove key")
+            q = k.get("usage")
+            if not q:
+                ui.label("No monthly request quota: the Climate Data Store limits the size of each request and "
+                         "queues them instead.").classes("edh-muted text-caption")
+                return
+            pct = q["used"] / k["quota"] if k["quota"] else 0
+            with ui.row().classes("w-full items-center gap-6 no-wrap"):
+                ui.circular_progress(value=min(1, pct), show_value=False, size="64px",
+                                     color="negative" if pct > 0.9 else "warning" if pct > 0.7 else "secondary").props(
+                    "thickness=0.2 track-color=grey-9")
+                with ui.column().classes("gap-0"):
+                    ui.label(f"{q['used']:,} / {k['quota']:,}").classes("edh-kpi-value")
+                    ui.label(f"requests used in {q['month']} · this app {q['app']:,} · "
+                             + (f"calibrated {q['calibrated_at'][:16]}" if q["calibrated_at"] else "not calibrated")
+                             + f" · resets {q['resets'][:10]}").classes("edh-muted text-caption")
+            with ui.row().classes("items-center gap-3"):
+                ui.button("Check on Earth Data Hub", icon="open_in_new",
+                          on_click=lambda: ui.navigate.to(QUOTA_URL, new_tab=True)).props(
+                    "unelevated no-caps").classes("edh-grad-btn")
+                used_in = ui.number("Used, as shown on the EDH quota page", min=0).classes("w-80")
 
-                        async def set_quota(qi=quota_in, n=k["name"]):
-                            if qi.value is None or qi.value < 1:
-                                ui.notify("Monthly quota must be a positive number", type="warning")
-                                return
-                            await call("key_set_quota", name=n, quota_=int(qi.value))
-                            await refresh_key_list()
-                            await refresh_quota()
+                async def calibrate(u=used_in, n=k["name"]):
+                    if u.value is None or u.value < 0:
+                        ui.notify("Enter the number shown on the Earth Data Hub quota page", type="warning")
+                        return
+                    if await call("key_calibrate", name=n, used=int(u.value)) is None:
+                        return
+                    await refresh_key_list()
+                    await refresh_quota()
+                    ui.notify("calibrated")
 
-                        ui.button("Set quota", on_click=set_quota).props("outline no-caps color=secondary")
-            ui.markdown("Earth Data Hub doesn't report your usage to API clients: the app counts its own requests. "
-                        f"Open the [quota page]({QUOTA_URL}), then enter the number shown there in **Calibrate** "
-                        "(includes requests from other tools), or the limit of your plan in **Set quota**."
-                        ).classes("edh-muted text-caption")
+                ui.button("Calibrate", on_click=calibrate).props("outline no-caps color=secondary")
+                quota_in = ui.number("Monthly quota", value=k["quota"], min=1).classes("w-44")
+
+                async def set_quota(qi=quota_in, n=k["name"]):
+                    if qi.value is None or qi.value < 1:
+                        ui.notify("Monthly quota must be a positive number", type="warning")
+                        return
+                    await call("key_set_quota", name=n, quota_=int(qi.value))
+                    await refresh_key_list()
+                    await refresh_quota()
+
+                ui.button("Set quota", on_click=set_quota).props("outline no-caps color=secondary")
 
     # ------------------------------------------------------------------ start
     async def start():

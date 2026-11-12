@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import zarr
 
-from . import catalog, keys, quota, store
+from . import catalog, keys, quota, sources, store
 from .aggregate import bitround, reduce_periods
 from .http import EDHClient, Fatal, QuotaReached, RequestCounter
 from .job import JobSpec
@@ -126,7 +126,8 @@ class Engine:
                     self._remove_icechunk()
                 self._done()
                 return "completed"
-            key = keys.get_key(spec.download.key)
+            src = sources.require_jobs(spec.source)
+            key = keys.get_key(spec.download.key, src.id)
             limit = int(key.quota * spec.download.quota_safety)
             self.counter = RequestCounter(key.fingerprint, limit=limit)
             self.key = key

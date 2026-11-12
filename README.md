@@ -242,6 +242,8 @@ password YOUR_API_KEY
 
 API keys are never written into job specifications or output metadata. Only the associated key name is recorded.
 
+Keys for the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) (CDS) can be added the same way, in their own group of the **Keys** tab or with `edh-dl keys add NAME --source cds`. The app also reads the token from `~/.cdsapirc` (the file the `cdsapi` package uses). Checking a CDS key is free. Downloads from the CDS are not available yet.
+
 ### 2. Select your dataset
 
 Open the application and browse the available Earth Data Hub datasets.

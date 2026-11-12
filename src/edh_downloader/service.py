@@ -11,7 +11,7 @@ import platform
 import threading
 from pathlib import Path
 
-from . import __version__, catalog, chunking, keys, quota, runner, sample, store
+from . import __version__, catalog, chunking, keys, quota, runner, sample, sources, store
 from .gui import structure
 from .http import RequestCounter
 from .job import JobSpec
@@ -22,9 +22,9 @@ _STORE_CACHE: dict = {}
 _LOCK = threading.Lock()
 
 
-def _key(name):
+def _key(name, provider: str = sources.EDH):
     try:
-        return keys.get_key(name)
+        return keys.get_key(name, provider)
     except KeyError:
         return None
 
@@ -37,37 +37,52 @@ def hello() -> dict:
 # ------------------------------------------------------------------ keys and quota
 
 def _key_row(k: keys.ApiKey) -> dict:
-    return {"name": k.name, "quota": k.quota, "source": k.source, "fingerprint": k.fingerprint,
-            "usage": quota.info(k.fingerprint)}
+    """A key as the UI sees it (never the secret). ``source``: where the key comes from (stored, netrc, cdsapirc);
+    ``provider``: the data source it opens. Only sources with a monthly quota have ``usage``."""
+    counted = sources.get(k.provider).has_quota
+    return {"name": k.name, "quota": k.quota, "source": k.source, "provider": k.provider,
+            "fingerprint": k.fingerprint, "usage": quota.info(k.fingerprint) if counted else None}
+
+
+def sources_list() -> list[dict]:
+    return [s.to_dict() for s in sources.SOURCES.values()]
 
 
 def keys_list() -> dict:
-    return {"default": keys.default_name(), "keys": [_key_row(k) for k in keys.list_keys()]}
+    """Every key; ``default`` is the Earth Data Hub default, ``defaults`` the default of each source."""
+    return {"default": keys.default_name(), "defaults": {p: keys.default_name(p) for p in sources.SOURCES},
+            "keys": [_key_row(k) for k in keys.list_keys()]}
 
 
-def key_status(name=None) -> dict | None:
-    k = _key(name)
+def key_status(name=None, provider: str = sources.EDH) -> dict | None:
+    k = _key(name, provider)
     return _key_row(k) if k else None
 
 
-def key_add(name: str, secret: str, quota_: int, check: bool = True) -> dict:
-    if check:
-        ok, msg = asyncio.run(keys.validate(secret))
-        if not ok:
-            return {"ok": False, "msg": msg}
+def key_add(name: str, secret: str, quota_: int | None = None, check: bool = True,
+            provider: str = sources.EDH) -> dict:
     try:
-        k = keys.add_key(name, secret, int(quota_))
+        src = sources.get(provider)
     except ValueError as e:
         return {"ok": False, "msg": str(e)}
     if check:
+        ok, msg = asyncio.run(keys.validate(secret, provider))
+        if not ok:
+            return {"ok": False, "msg": msg}
+    try:
+        k = keys.add_key(name, secret, None if quota_ is None else int(quota_), provider=provider)
+    except ValueError as e:
+        return {"ok": False, "msg": str(e)}
+    if check and src.has_quota:
         quota.add(k.fingerprint, 1)
     return {"ok": True, "name": k.name}
 
 
 def key_test(name: str) -> dict:
-    k = keys.get_key(name)
-    ok, msg = asyncio.run(keys.validate(k.secret))
-    quota.add(k.fingerprint, 1)
+    k = keys.find_key(name)
+    ok, msg = asyncio.run(keys.validate(k.secret, k.provider))
+    if sources.get(k.provider).has_quota:
+        quota.add(k.fingerprint, 1)
     return {"ok": ok, "msg": msg}
 
 
@@ -87,17 +102,19 @@ def key_set_quota(name: str, quota_: int) -> dict:
 
 
 def key_calibrate(name: str, used: int) -> dict:
-    quota.calibrate(keys.get_key(name).fingerprint, int(used))
+    quota.calibrate(keys.get_key(name, sources.EDH).fingerprint, int(used))
     return {"ok": True}
 
 
 # ------------------------------------------------------------------ catalogue and datasets
 
-def collections() -> list[dict]:
+def collections(source: str = sources.EDH) -> list[dict]:
+    sources.require_jobs(source)
     return catalog.collections()
 
 
-def datasets(collection: str) -> list[dict]:
+def datasets(collection: str, source: str = sources.EDH) -> list[dict]:
+    sources.require_jobs(source)
     return catalog.datasets(collection)
 
 
@@ -173,8 +190,11 @@ def sample_run(spec: dict, key: str, n: int, emit=None) -> dict:
 
 def job_start(spec: dict) -> dict:
     s = JobSpec.from_dict(spec)
-    if not _key(s.download.key):
-        raise ValueError("add an API key first")
+    src = sources.require_jobs(s.source)
+    try:
+        keys.get_key(s.download.key, src.id)
+    except KeyError as e:
+        raise ValueError(e.args[0] if e.args else f"add a {src.title} API key first") from None
     name = s.output.name
     if (not name.strip() or name != name.strip() or name in (".", "..") or "/" in name or "\\" in name
             or "\0" in name):
@@ -275,6 +295,6 @@ def store_inspect(path: str) -> dict:
 
 
 METHODS = {f.__name__: f for f in (
-    hello, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
+    hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
     collections, datasets, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
     job_connections, job_delete, job_log, store_structure, store_inspect)}
