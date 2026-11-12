@@ -110,3 +110,23 @@ def fake_edh(tmp_path_factory):
     srv = FakeEDH(root).start()
     srv.data, srv.lat, srv.lon, srv.t = data, lat, lon, t
     return srv
+
+
+@pytest.fixture(scope="session")
+def fake_cds_server():
+    from fake_cds import FakeCDS
+
+    return FakeCDS().start()
+
+
+@pytest.fixture
+def cds(fake_cds_server, home, monkeypatch):
+    """A fresh fake Climate Data Store, which the app uses instead of the real one, and a CDS key for it."""
+    from fake_cds import TOKEN
+
+    from edh_downloader import keys
+
+    fake_cds_server.reset()
+    monkeypatch.setenv("EDH_DL_CDS_API", fake_cds_server.api)
+    keys.add_key("cds-test", TOKEN, provider="cds")
+    return fake_cds_server

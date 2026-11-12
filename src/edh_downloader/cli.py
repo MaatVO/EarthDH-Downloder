@@ -58,7 +58,9 @@ def main(argv=None):
     x.add_argument("name"); x.add_argument("used", type=int)
     x = ks.add_parser("test", help="check a key (Earth Data Hub: 1 request; CDS: free)"); x.add_argument("name", nargs="?")
 
-    x = sub.add_parser("datasets", help="list datasets of a collection"); x.add_argument("--collection", default="era5")
+    x = sub.add_parser("datasets", help="list datasets of a collection"); x.add_argument("--collection")
+    x.add_argument("--source", choices=["edh", "cds"], default="edh",
+                   help="cds: the Climate Data Store (--collection is then a product type, e.g. Reanalysis)")
     x = sub.add_parser("variables", help="list variables of a dataset (a few requests, cached)")
     x.add_argument("dataset"); x.add_argument("--collection", default="era5")
     x = sub.add_parser("plan", help="show what a job file would download"); x.add_argument("job_file")
@@ -155,9 +157,16 @@ def main(argv=None):
             sys.exit(0 if ok else 1)
         return
     if a.cmd == "datasets":
+        if a.source == "cds":
+            from .sources.cds import catalog as cds_catalog
+
+            for d in cds_catalog.datasets():
+                if a.collection in (None, d["category"]):
+                    print(f"{d['id']:<56} {d['category']:<26} {d['title']}")
+            return
         from . import catalog
 
-        for d in catalog.datasets(a.collection):
+        for d in catalog.datasets(a.collection or "era5"):
             print(f"{d['id']:<48} {d['size']:>9}  {d['title']}")
         return
     if a.cmd == "variables":

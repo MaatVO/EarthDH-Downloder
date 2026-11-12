@@ -1,0 +1,189 @@
+[
+  {
+    "name": "variable",
+    "label": "Variable",
+    "help": "Please, consult the product user guide in the documentation section for more information on these variables.",
+    "required": true,
+    "css": "todo",
+    "type": "StringListWidget",
+    "details": {
+      "values": [
+        "100m_u_component_of_wind",
+        "100m_v_component_of_wind",
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "10m_wind_gust_since_previous_post_processing",
+        "2m_dewpoint_temperature",
+        "2m_temperature",
+        "boundary_layer_height",
+        "cloud_base_height",
+        "mean_sea_level_pressure",
+        "mean_wave_direction",
+        "mean_wave_period",
+        "sea_surface_temperature",
+        "significant_height_of_combined_wind_waves_and_swell",
+        "skin_temperature",
+        "surface_latent_heat_flux",
+        "surface_pressure",
+        "surface_sensible_heat_flux",
+        "surface_solar_radiation_downwards",
+        "surface_thermal_radiation_downwards",
+        "total_cloud_cover",
+        "total_precipitation",
+        "total_sky_direct_solar_radiation_at_surface"
+      ],
+      "columns": 2,
+      "labels": {
+        "100m_u_component_of_wind": "100m u-component of wind",
+        "100m_v_component_of_wind": "100m v-component of wind",
+        "10m_u_component_of_wind": "10m u-component of wind",
+        "10m_v_component_of_wind": "10m v-component of wind",
+        "10m_wind_gust_since_previous_post_processing": "10m wind gust since previous post-processing",
+        "2m_dewpoint_temperature": "2m dewpoint temperature",
+        "2m_temperature": "2m temperature",
+        "boundary_layer_height": "Boundary layer height",
+        "cloud_base_height": "Cloud base height",
+        "mean_sea_level_pressure": "Mean sea level pressure",
+        "mean_wave_direction": "Mean wave direction",
+        "mean_wave_period": "Mean wave period",
+        "sea_surface_temperature": "Sea surface temperature",
+        "significant_height_of_combined_wind_waves_and_swell": "Significant height of combined wind waves and swell",
+        "skin_temperature": "Skin temperature",
+        "surface_latent_heat_flux": "Surface latent heat flux",
+        "surface_pressure": "Surface pressure",
+        "surface_sensible_heat_flux": "Surface sensible heat flux",
+        "surface_solar_radiation_downwards": "Surface solar radiation downwards",
+        "surface_thermal_radiation_downwards": "Surface thermal radiation downwards",
+        "total_cloud_cover": "Total cloud cover",
+        "total_precipitation": "Total precipitation",
+        "total_sky_direct_solar_radiation_at_surface": "Total sky direct solar radiation at surface"
+      }
+    },
+    "id": "variable"
+  },
+  {
+    "type": "ExclusiveGroupAccordionWidget",
+    "details": {
+      "default": "location",
+      "titles": {
+        "location": "Location selection",
+        "area": "Area selection"
+      }
+    },
+    "order": [
+      "location",
+      "area"
+    ],
+    "help": "**Location** selection returns a time series for the nearest grid point to the selected location. Output formats: NetCDF (recommended) or CSV.\n\n**Area** selection returns a time series for each grid point within the selected small area. No spatial aggregation is performed. Output formats: NetCDF (recommended) or CSV.\n",
+    "name": "geo_group",
+    "label": "Geographical area",
+    "children": [
+      "location",
+      "area"
+    ]
+  },
+  {
+    "name": "date",
+    "label": "Date",
+    "help": null,
+    "required": true,
+    "css": "todo",
+    "type": "DateRangeWidget",
+    "details": {
+      "minStart": "1940-01-01",
+      "maxEnd": "2026-11-04",
+      "defaultStart": "1940-01-01",
+      "defaultEnd": "2026-11-04"
+    },
+    "id": "date"
+  },
+  {
+    "name": "data_format",
+    "label": "Data format",
+    "help": "<p><strong>NetCDF</strong>: available with Area and Location.<br> <strong>CSV</strong>: available only with Location.<br></p>",
+    "required": true,
+    "css": "todo",
+    "type": "StringChoiceWidget",
+    "details": {
+      "values": [
+        "netcdf",
+        "csv"
+      ],
+      "columns": 2,
+      "labels": {
+        "netcdf": "NetCDF",
+        "csv": "CSV"
+      },
+      "default": [
+        "netcdf"
+      ]
+    },
+    "id": "data_format"
+  },
+  {
+    "details": {
+      "stepX": 0.25,
+      "stepY": 0.25,
+      "default": {
+        "n": 52,
+        "e": 1,
+        "s": 51,
+        "w": 0
+      },
+      "range": {
+        "n": 90,
+        "s": -90,
+        "e": 180,
+        "w": -180
+      },
+      "maximum_extent": {
+        "lat": 2,
+        "lon": 2
+      },
+      "minimum_extent": {
+        "lat": 0.25,
+        "lon": 0.25
+      },
+      "enableMap": true
+    },
+    "help": "Returns a timeseries of grid points in the selected area.",
+    "name": "area",
+    "type": "GeographicExtentWidget",
+    "label": "Area selection"
+  },
+  {
+    "details": {
+      "range": {
+        "n": 90,
+        "s": -90,
+        "e": 179.9,
+        "w": -180
+      },
+      "enableMap": true,
+      "stepX": 0.25,
+      "stepY": 0.25
+    },
+    "help": "Returns a time series for the nearest grid point to the selected location. Output formats: NetCDF (recommended) or CSV.",
+    "name": "location",
+    "type": "GeographicLocationWidget",
+    "label": "Location selection"
+  },
+  {
+    "type": "LicenceWidget",
+    "name": "licences",
+    "label": "Terms of use",
+    "help": null,
+    "details": {
+      "licences": [
+        {
+          "id": "cc-by",
+          "revision": 1,
+          "label": "CC-BY licence",
+          "contents_url": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/licences/cc-by/cc-byv1_2b61eb0b42e053566cb9447c1d2847a69a275c095e00fca00bad1bf5326a9432.md",
+          "attachment_url": "https://spdx.org/licenses/CC-BY-4.0",
+          "spdx_identifier": "CC-BY-4.0"
+        }
+      ]
+    }
+  }
+]

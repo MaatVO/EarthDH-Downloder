@@ -1,0 +1,578 @@
+{
+"collections": [
+{
+"type": "Collection",
+"id": "satellite-sea-ice-concentration",
+"stac_version": "1.1.0",
+"title": "Sea ice concentration from 1978 to present derived from satellite observations",
+"description": "This dataset provides daily gridded data of sea ice concentration for both hemispheres derived from satellite passive microwave brightness temperatures. Sea ice is an important component of our climate system and a sensitive indicator of climate change. Its presence or its retreat has a strong impac",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Product type: Satellite observations",
+"Variable domain: Ocean (physics)"
+],
+"license": "other",
+"extent": {
+"spatial": {
+"bbox": [
+[
+0.0,
+-89.0,
+360.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1978-10-01T00:00:00+00:00",
+"2026-10-27T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/satellite-sea-ice-concentration"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "qa",
+"href": "https://cds.climate.copernicus.eu/datasets/satellite-sea-ice-concentration?tab=quality_assurance_tab",
+"title": "Quality assessment of the dataset",
+"type": "text/html"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/satellite-sea-ice-concentration/overview_6ec7fdacddea9a2e146d2aad340e99ad5cb16ac50c901abf92643b046e611e73.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2020-12-21T00:00:00Z",
+"updated": "2026-11-12T00:00:00Z",
+"sci:doi": "10.24381/cds.3cd8b812",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:45:07.220778+00:00"
+},
+"cads:update_frequency": "Daily",
+"cads:fair": 76
+},
+{
+"type": "Collection",
+"id": "reanalysis-era5-single-levels",
+"stac_version": "1.1.0",
+"title": "ERA5 hourly data on single levels from 1940 to present",
+"description": "ERA5 is the fifth generation ECMWF reanalysis for the global climate and weather for the past 8 decades.\nData is available from 1940 onwards.\nERA5 replaces the ERA-Interim reanalysis.\nReanalysis combines model data with observations from across the world into a globally complete and consistent datas",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Product type: Reanalysis",
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Variable domain: Atmosphere (surface)",
+"Variable domain: Atmosphere (upper air)",
+"Provider: Copernicus C3S"
+],
+"license": "CC-BY-4.0",
+"extent": {
+"spatial": {
+"bbox": [
+[
+0.0,
+-89.0,
+360.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1940-01-01T00:00:00+00:00",
+"2026-11-06T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/reanalysis-era5-single-levels/overview_48ac7d4fc21db572d6e7b887e00421aaac8489186a1cc3f0b67e2ae33394a8a3.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2018-06-14T00:00:00Z",
+"updated": "2026-11-12T00:00:00Z",
+"sci:doi": "10.24381/cds.adbb2d47",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:46:11.692093+00:00"
+},
+"cads:update_frequency": "Daily",
+"cads:fair": 84
+},
+{
+"type": "Collection",
+"id": "reanalysis-era5-pressure-levels",
+"stac_version": "1.1.0",
+"title": "ERA5 hourly data on pressure levels from 1940 to present",
+"description": "ERA5 is the fifth generation ECMWF reanalysis for the global climate and weather for the past 8 decades.\nData is available from 1940 onwards.\nERA5 replaces the ERA-Interim reanalysis.\nReanalysis combines model data with observations from across the world into a globally complete and consistent datas",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Product type: Reanalysis",
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Variable domain: Atmosphere (surface)",
+"Variable domain: Atmosphere (upper air)",
+"Provider: Copernicus C3S"
+],
+"license": "CC-BY-4.0",
+"extent": {
+"spatial": {
+"bbox": [
+[
+0.0,
+-89.0,
+360.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1940-01-01T00:00:00+00:00",
+"2026-11-06T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-pressure-levels"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/reanalysis-era5-pressure-levels/overview_652fd83a7b2ed724ce541e563beff9c4484c3482bc08334a638a4bc47ae4cf0f.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2018-06-14T00:00:00Z",
+"updated": "2026-11-12T00:00:00Z",
+"sci:doi": "10.24381/cds.bd0915c6",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:45:31.549831+00:00"
+},
+"cads:update_frequency": "Daily",
+"cads:fair": 11
+},
+{
+"type": "Collection",
+"id": "reanalysis-era5-single-levels-timeseries",
+"stac_version": "1.1.0",
+"title": "ERA5 hourly time-series data on single levels from 1940 to present",
+"description": "ERA5 is the fifth generation ECMWF reanalysis for the global climate and weather for the past 8 decades.\nData is available from 1940 onwards. ERA5 replaces the ERA-Interim reanalysis.\nReanalysis combines model data with observations from across the world into a globally complete and consistent datas",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Product type: Reanalysis",
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Variable domain: Atmosphere (surface)",
+"Variable domain: Atmosphere (upper air)",
+"Provider: Copernicus C3S",
+"Data type: Time-series"
+],
+"license": "CC-BY-4.0",
+"extent": {
+"spatial": {
+"bbox": [
+[
+-180.0,
+-89.0,
+180.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1940-01-01T00:00:00+00:00",
+"2024-12-06T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-single-levels-timeseries"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/reanalysis-era5-single-levels-timeseries/overview_d9a171109cee68a5dab12ba883fe32b5867f52ca4d64e9f6d5b6f25998d4735c.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2025-03-17T00:00:00Z",
+"updated": "2026-11-12T00:00:00Z",
+"sci:doi": "10.24381/1cf1ad76",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:44:50.805928+00:00"
+},
+"cads:fair": 11
+},
+{
+"type": "Collection",
+"id": "reanalysis-cerra-single-levels",
+"stac_version": "1.1.0",
+"title": "CERRA sub-daily regional reanalysis data for Europe on single levels from 1984 to present",
+"description": "The Copernicus European Regional ReAnalysis (CERRA) datasets provide spatially and temporally consistent historical reconstructions of meteorological variables in the atmosphere and at the surface. There are four subsets: single levels (atmospheric and surface quantities), height levels (upper-air f",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Product type: Reanalysis",
+"Temporal coverage: Past",
+"Spatial coverage: Europe",
+"Variable domain: Land (hydrology)",
+"Variable domain: Atmosphere (surface)"
+],
+"license": "CC-BY-4.0",
+"extent": {
+"spatial": {
+"bbox": [
+[
+17.0,
+20.0,
+35.0,
+65.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1984-09-01T00:00:00+00:00",
+"2026-08-31T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-cerra-single-levels"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "qa",
+"href": "https://cds.climate.copernicus.eu/datasets/reanalysis-cerra-single-levels?tab=quality_assurance_tab",
+"title": "Quality assessment of the dataset",
+"type": "text/html"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/reanalysis-cerra-single-levels/overview_66070d5536cd25c00721b57234c482d8dc9c6ffea5110c9642d0eb31cde5d8f4.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2022-08-02T00:00:00Z",
+"updated": "2026-11-09T00:00:00Z",
+"sci:doi": "10.24381/cds.622a565a",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:49:06.684754+00:00"
+},
+"cads:update_frequency": "Monthly",
+"cads:fair": 92
+},
+{
+"type": "Collection",
+"id": "insitu-observations-surface-land",
+"stac_version": "1.1.0",
+"title": "Global land surface atmospheric variables from 1718 to present from comprehensive in-situ observations",
+"description": "This set of data holdings provides access to data collected from land surface meteorological observations across the globe. Data are available at the observational level and also at daily and monthly aggregations. Data have been collated and harmonised and quality control checks have been performed,",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Product type: In-situ observations",
+"Variable domain: Atmosphere (surface)",
+"Provider: Copernicus C3S"
+],
+"license": "other",
+"extent": {
+"spatial": {
+"bbox": [
+[
+-180.0,
+-89.0,
+180.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1718-01-01T00:00:00+00:00",
+"2026-02-26T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/insitu-observations-surface-land"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/insitu-observations-surface-land/overview_f31bc353e3e4105573b44ec9ae70ef43ec6216edc1f5a9bd5d593f770119bfd4.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2021-08-19T00:00:00Z",
+"updated": "2026-11-02T00:00:00Z",
+"sci:doi": "10.24381/cds.cf5f3bac",
+"cads:message": {
+"id": "contents/insitu/2026-11-02-warning-insitu-observations-surface-land.md",
+"date": "2026-11-02T00:00:00Z",
+"summary": null,
+"url": null,
+"severity": "warning",
+"content": "In versions 2.0 and 3.0 of the sub-daily data, wet-bulb temperature observations from source 401 (column \"source_id\") were inadvertently reported as dew-point temperature. These values should not be used as dew-point temperatures. This will be corrected in the next scheduled release. See the [Known issues](https://cds.climate.copernicus.eu/datasets/insitu-observations-surface-land?tab=documentation) section in the Documentation tab for details.",
+"live": true,
+"show_date": true
+},
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:49:38.111676+00:00"
+},
+"cads:update_frequency": "Annual",
+"cads:fair": 11
+},
+{
+"type": "Collection",
+"id": "projections-cmip6",
+"stac_version": "1.1.0",
+"title": "CMIP6 climate projections",
+"description": "This catalogue entry provides daily and monthly global climate projections data from a large number of experiments, models and time periods computed in the framework of the sixth phase of the Coupled Model Intercomparison Project (CMIP6).\nCMIP6 data underpins the Intergovernmental Panel on Climate C",
+"summaries": {},
+"providers": [
+{
+"name": "ECMWF"
+}
+],
+"keywords": [
+"Temporal coverage: Past",
+"Spatial coverage: Global",
+"Temporal coverage: Present",
+"Variable domain: Atmosphere (surface)",
+"Variable domain: Atmosphere (upper air)",
+"Product type: Climate projections",
+"Temporal coverage: Future"
+],
+"license": "other",
+"extent": {
+"spatial": {
+"bbox": [
+[
+0.0,
+-89.0,
+360.0,
+89.0
+]
+]
+},
+"temporal": {
+"interval": [
+[
+"1860-01-01T00:00:00+00:00",
+"2300-12-31T00:00:00+00:00"
+]
+]
+}
+},
+"links": [
+{
+"rel": "self",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/collections/projections-cmip6"
+},
+{
+"rel": "parent",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "root",
+"type": "application/json",
+"href": "https://cds.climate.copernicus.eu/api/catalogue/v1/"
+},
+{
+"rel": "qa",
+"href": "https://cds.climate.copernicus.eu/datasets/projections-cmip6?tab=quality_assurance_tab",
+"title": "Quality assessment of the dataset",
+"type": "text/html"
+}
+],
+"assets": {
+"thumbnail": {
+"href": "https://object-store.os-api.cci2.ecmwf.int:443/cci2-prod-catalogue/resources/projections-cmip6/overview_452b3df21b144e5084354f2e6053b7712dd83d6592126c445d3f9bc046f98f84.png",
+"type": "image/jpg",
+"roles": [
+"thumbnail"
+]
+}
+},
+"published": "2021-03-23T00:00:00Z",
+"updated": "2026-08-14T00:00:00Z",
+"sci:doi": "10.24381/cds.c866074c",
+"cads:disabled_reason": null,
+"cads:sanity_check": {
+"status": "available",
+"timestamp": "2026-11-12T15:33:01.152960+00:00"
+},
+"cads:update_frequency": "Not planned",
+"cads:fair": 11
+}
+],
+"links": [],
+"numberMatched": 7,
+"numberReturned": 7
+}

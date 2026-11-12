@@ -120,8 +120,6 @@ def test_this_version_does_not_start_cds_jobs(home):
     spec.download.key = "c"
     with pytest.raises(ValueError, match="not available"):
         service.job_start(spec.to_dict())
-    with pytest.raises(ValueError, match="not available"):
-        service.datasets("x", source="cds")
     with pytest.raises(ValueError, match="unknown data source"):
         sources.get("nope")
 

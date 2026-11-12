@@ -109,13 +109,51 @@ def key_calibrate(name: str, used: int) -> dict:
 # ------------------------------------------------------------------ catalogue and datasets
 
 def collections(source: str = sources.EDH) -> list[dict]:
-    sources.require_jobs(source)
+    """The dataset groups of a source: Earth Data Hub collections, or Climate Data Store product types."""
+    if sources.get(source).id == sources.CDS:
+        from .sources.cds import catalog as cds_catalog
+
+        return cds_catalog.categories()
     return catalog.collections()
 
 
 def datasets(collection: str, source: str = sources.EDH) -> list[dict]:
-    sources.require_jobs(source)
+    if sources.get(source).id == sources.CDS:
+        from .sources.cds import catalog as cds_catalog
+
+        return [dict(d, collection=d["category"], deprecated=bool(d["disabled"]), size="")
+                for d in cds_catalog.datasets() if d["category"] == collection]
     return catalog.datasets(collection)
+
+
+def cds_describe(dataset: str, key: str | None = None, refresh: bool = False) -> dict:
+    """A CDS dataset's form as the app uses it; with a key, also which of its licences are not accepted yet
+    (one free call)."""
+    from .sources.cds import catalog as cds_catalog
+    from .sources.cds.client import CDSClient
+
+    d = cds_catalog.describe(dataset, refresh)
+    d["licences_missing"] = None
+    k = _key(key, sources.CDS)
+    if k is not None and d["licences"]:
+        async def accepted():
+            async with CDSClient(k.secret, retries=2) as c:
+                return await c.licences()
+        try:
+            have = asyncio.run(accepted())
+            d["licences_missing"] = [l for l in d["licences"] if (l["id"], l["revision"]) not in have]
+        except Exception:  # noqa: BLE001  (unknown: the form still works)
+            pass
+    return d
+
+
+def cds_check(dataset: str, request: dict) -> dict:
+    """Free, local check of a CDS request against the dataset's constraints: ``{field: [values]}`` that cannot
+    be delivered (empty: fine), and the values still possible for each field."""
+    from .sources.cds import catalog as cds_catalog
+
+    table = cds_catalog.constraints(dataset)
+    return {"invalid": cds_catalog.invalid(table, request), "allowed": cds_catalog.allowed(table, request)}
 
 
 def dataset_load(info: dict, key: str, refresh: bool = False) -> dict:
@@ -296,5 +334,5 @@ def store_inspect(path: str) -> dict:
 
 METHODS = {f.__name__: f for f in (
     hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
-    collections, datasets, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
+    collections, datasets, cds_describe, cds_check, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
     job_connections, job_delete, job_log, store_structure, store_inspect)}
