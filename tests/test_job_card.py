@@ -115,3 +115,17 @@ def test_waiting_job_says_it_continues_by_itself():
 def test_stale_line_says_how_old():
     assert "Last update 4m ago" in jobs_stale_html("4m")
     assert "Last update" not in jobs_stale_html(None)
+
+
+def test_cds_job_notes_talk_about_the_queue_not_the_quota():
+    from edh_downloader.gui.app import job_forecast, job_note, job_resume_cost
+
+    s = {"spec": {"source": "cds"}, "status": "paused", "units_total": 4,
+         "cds_requests": {"done": 1, "queued": 2, "planned": 3}, "message": "1/4 units committed"}
+    note = job_note(s, 1, 4)
+    assert "keep their place" in note and "quota" not in note
+    assert job_resume_cost(s) == ("Resuming submits 3 more requests to the CDS queue.", False)
+    assert job_forecast(dict(s, status="running")) == ("", "1/4 units committed")
+    failed = dict(s, status="failed", error="Fatal: accept the licence of this dataset first: CC-BY licence")
+    assert job_note(failed, 0, 4).startswith("accept the licence")
+    assert "Earth Data Hub" not in job_note(dict(failed, error="the Climate Data Store refused the token (HTTP 403)"), 0, 4)

@@ -87,14 +87,19 @@ def app_steps(where: str, sample_requests: int, replay_hint: str) -> list[dict]:
                  "stay there. A job takes four moves: add an API key, choose the data, check the cost, launch."},
         {"el": ".edh-tour-tabs", "title": "Three tabs",
          "body": "<b>New job</b> sets up a download. <b>Jobs</b> follows the ones you started. <b>Keys</b> holds "
-                 "your Earth Data Hub API keys."},
+                 "your API keys for Earth Data Hub and the Climate Data Store."},
         {"el": [".edh-tour-keys-add", ".edh-tour-keys"], "click": ".edh-tour-tab-keys", "title": "Add your API key",
-         "body": "Paste a key from the Earth Data Hub API keys page. It is stored on the machine that runs the "
-                 "downloads and never written into jobs or outputs. Checking it costs 1 request."},
+         "body": "Paste a key from the Earth Data Hub API keys page, or a Climate Data Store token from your CDS "
+                 "profile (a <code>~/.cdsapirc</code> is found by itself). Keys are stored on the machine that runs "
+                 "the downloads and never written into jobs or outputs."},
         {"el": ".edh-tour-quota", "title": "Watch the quota",
          "body": "Earth Data Hub allows 500,000 requests a month, and every source chunk downloaded is one "
                  "request. The app counts only its own requests: calibrate it in Keys against the official quota "
                  "page."},
+        {"el": ".edh-tour-source", "click": NEW, "title": "Earth Data Hub or Climate Data Store",
+         "body": "Choose where the data comes from. Earth Data Hub reads ERA5 chunks directly. The Climate Data "
+                 "Store has every Copernicus dataset, but each request waits in a queue: the app packs your "
+                 "selection into as few requests as the CDS allows."},
         {"el": ".edh-tour-dataset", "click": NEW, "title": "1 · Dataset",
          "body": "Pick a collection and a dataset. Its variables, levels, grid and time span load from Earth Data "
                  "Hub."},

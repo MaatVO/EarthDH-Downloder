@@ -161,7 +161,9 @@ def _option(w: dict) -> dict:
         "values": values, "labels": labels,
         "groups": [{"label": g.get("label"), "values": [str(v) for v in g.get("values", [])]}
                    for g in det.get("groups") or []],
-        "default": default if isinstance(default, list) else ([default] if default is not None else []),
+        # unique, in order: some forms repeat their default (ERA5: ["reanalysis", "reanalysis"])
+        "default": list(dict.fromkeys(str(x) for x in (default if isinstance(default, list) else
+                                                        [default] if default is not None else []))),
     }
 
 

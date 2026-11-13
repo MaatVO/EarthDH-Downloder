@@ -23,7 +23,7 @@ from .. import __version__, chunking
 from ..backend import BackendError, Local
 from ..runner import ACTIVE
 from ..quota import next_reset
-from ..job import COMPRESSORS, FREQS, STATS, AreaSpec, DownloadSpec, JobSpec, OutputSpec, Point, TimeSpec
+from ..job import COMPRESSORS, FREQS, STATS, AreaSpec, CdsSpec, DownloadSpec, JobSpec, OutputSpec, Point, TimeSpec
 from ..util import human_bytes, human_duration
 from . import structure, tour
 from .auth import TokenMiddleware
@@ -108,9 +108,25 @@ def job_error_text(error: str) -> str:
     return re.sub(r"^Fatal:\s*", "", error)
 
 
+def is_cds(s: dict) -> bool:
+    return (s.get("spec") or {}).get("source") == "cds"
+
+
 def job_note(s: dict, done: int, total: int) -> str:
     """What happened to a stopped job and what to do next. Running jobs report through their own progress message."""
     st = s.get("status")
+    if is_cds(s):
+        what = "units are committed" if s.get("units_total") else "files are downloaded"
+        committed = f"{done:,} of {total:,} {what} and safe." if done and total else ""
+        if st == "failed":
+            return f"{re.sub(r'^Fatal:\s*', '', s.get('error') or 'The job stopped because of an error. The Log has the details.')} {committed}"
+        if st == "interrupted":
+            when = f" Last activity {s['_ago']} ago." if s.get("_ago") else ""
+            return f"Stopped unexpectedly.{when} {committed} Requests already on the CDS keep their place: Resume picks them up."
+        if st == "paused":
+            return f"{committed} Requests already on the CDS keep their place in the queue: Resume picks them up."
+        if st == "cancelled":
+            return f"{committed} Requests waiting on the CDS were withdrawn. Resume submits them again."
     committed = f"{done:,} of {total:,} units are committed and safe." if done and total else "No units were committed."
     resume = "Resume continues from there." if done else "Resume starts it from the beginning."
     if st == "interrupted":
@@ -132,6 +148,8 @@ def job_note(s: dict, done: int, total: int) -> str:
 
 def job_forecast(s: dict) -> tuple[str, str]:
     """A running job's (headline after the status, sentence under the bar), honest about the monthly quota."""
+    if is_cds(s):  # queue waits cannot be forecast: the card shows them as they happen
+        return "", s.get("message") or ""
     eta, rate = s.get("eta_s"), s.get("req_rate")
     if not eta or not rate:
         return "", ""
@@ -154,6 +172,11 @@ def job_forecast(s: dict) -> tuple[str, str]:
 
 def job_resume_cost(s: dict) -> tuple[str, bool]:
     """What resuming a stopped job will spend, and whether that is more than this month has left."""
+    if is_cds(s):
+        c = s.get("cds_requests") or {}
+        left = sum(v for k, v in c.items() if k in ("planned", "submitting", "failed"))
+        return (f"Resuming submits {left:,} more request{'s' if left != 1 else ''} to the CDS queue." if left else
+                "", False)
     total = s.get("requests_total")
     if not total:
         return "", False
@@ -196,6 +219,15 @@ OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"  # darkened wit
 
 DEFAULT_QUOTA = 500_000  # free DestinE access: requests per calendar month
 QUOTA_URL = "https://earthdatahub.destine.eu/quota-api-keys"
+CDS_KEY_URL = "https://cds.climate.copernicus.eu/profile"
+CDS_DATASET_URL = "https://cds.climate.copernicus.eu/datasets/{}?tab=download"
+TIER_TEXT = {  # what the app does with a CDS dataset, by tier (sources/cds/catalog.py)
+    "grib": ("Full pipeline", "GRIB fields: area, statistics, Icechunk and Zarr"),
+    "netcdf": ("Files", "delivered as the NetCDF files the CDS produces"),
+    "timeseries": ("Files · time series", "one file per point, as the CDS produces it"),
+    "table": ("Not available", "in-situ observation tables cannot be made into a gridded store"),
+}
+GRIDS = {"native": "Native", "0.25": "0.25°", "0.5": "0.5°", "1": "1°", "2.5": "2.5°", "custom": "Custom"}
 EDH_SOURCE = {"id": "edh", "title": "Earth Data Hub", "short": "EDH", "key_url": QUOTA_URL, "has_quota": True,
               "check_cost": "1 request", "jobs": True,
               "key_hint": "`~/.netrc` (machine data.earthdatahub.destine.eu) is used automatically."}
@@ -413,9 +445,15 @@ def build_page(be, local: bool = False, embedded: bool = False):
         "shard_auto": True, "shard_time": 1, "shard_space": 4, "extra_attrs": "",
         "key": None, "connections": 8, "spool_dir": "", "max_spool_gb": 20.0, "min_free_gb": 10.0,
         "quota_safety": 0.9, "wait_for_quota": True, "memory_gb": 16.0,
+        # Climate Data Store
+        "source": "edh", "cds_options": {}, "grid": "native", "grid_custom": 0.5, "max_inflight": 4,
+        "pack": "auto", "max_request_gb": 10.0,
     }
     ctx = {"keys": {"default": None, "keys": []}, "plan_seq": 0, "ds": None, "info": None, "plan": None, "plan_task": None, "rec": ("auto", ""),
-           "thumbs": {}, "thumbs_asked": set()}  # thumbs: collection -> dataset id -> image URL
+           "thumbs": {}, "thumbs_asked": set(),  # thumbs: collection -> dataset id -> image URL
+           # per source: the collection and dataset last chosen, and the key
+           "sel": {"edh": ("era5", "era5-single-levels-atmosphere"), "cds": ("Reanalysis", "reanalysis-era5-single-levels")},
+           "keysel": {}, "cds_desc": None, "cds_thumbs": {}}
 
     # ================================================================ header
     with ui.header().classes("edh-header items-center justify-between px-3 sm:px-6 py-2"):
@@ -423,7 +461,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             ui.html('<div class="edh-logo"><span class="material-icons">public</span></div>', sanitize=False)
             with ui.column().classes("gap-0"):
                 ui.label("EDH Downloader").classes("edh-brand").props("role=heading aria-level=1")
-                ui.label(f"Earth Data Hub datasets → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
+                ui.label(f"Earth Data Hub and Climate Data Store → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
         with ui.tabs().props("no-caps dense indicator-color=transparent active-class=edh-tab-active"
                              ).classes("edh-tabs edh-tour-tabs") as tabs:
             t_new = ui.tab("New job", icon="add_circle_outline").classes("edh-tour-tab-new")
@@ -464,18 +502,27 @@ def build_page(be, local: bool = False, embedded: bool = False):
         if d is None:
             return
         ctx["keys"] = d
-        key_select.options = {k["name"]: k["name"] for k in d["keys"] if k.get("provider", "edh") == "edh"}
+        src = f["source"]
+        key_select.options = {k["name"]: k["name"] for k in d["keys"] if k.get("provider", "edh") == src}
         if f["key"] not in key_select.options:
-            f["key"] = d["default"]
+            defaults = d.get("defaults") or {"edh": d["default"]}
+            f["key"] = ctx["keysel"].get(src) if ctx["keysel"].get(src) in key_select.options else defaults.get(src)
         key_select.value = f["key"]
         key_select.update()
         await refresh_quota()
 
     async def refresh_quota():
+        cds = f["source"] == "cds"
         try:
-            k = await be.call("key_status", name=f["key"])
+            k = await be.call("key_status", name=f["key"], **({"provider": "cds"} if cds else {}))
         except BackendError:
             k = None
+        quota_bar.set_visibility(not cds)
+        if missing_key_banner:
+            banner_title.text = ("Climate Data Store key required" if cds else "Earth Data Hub API Key Required")
+            banner_text.text = ("A Climate Data Store personal access token is needed to check licences and costs, "
+                                "and to download." if cds else "An API key is required to inspect dataset variables, "
+                                "calculate request quotas, and download data.")
         if not k:
             quota_label.text = "⚠️ no API key: add one in Keys"
             quota_label.classes(replace="text-caption text-amber-400 font-medium cursor-pointer")
@@ -486,12 +533,16 @@ def build_page(be, local: bool = False, embedded: bool = False):
         quota_label.classes(replace="text-caption")
         if missing_key_banner:
             missing_key_banner.set_visibility(False)
+        if cds:
+            quota_label.text = "Climate Data Store · no monthly quota: requests wait in a queue"
+            return
         q = k["usage"]
         pct = q["used"] / k["quota"] if k["quota"] else 0
         quota_label.text = f"quota {q['used']:,} / {k['quota']:,} · resets {q['resets'][:10]}"
         quota_bar.value = min(1.0, pct)
 
-    key_select.on_value_change(lambda e: (f.update(key=e.value), later(refresh_quota), schedule_plan()))
+    key_select.on_value_change(lambda e: (f.update(key=e.value), ctx["keysel"].__setitem__(f["source"], e.value),
+                                          later(refresh_quota), schedule_plan()))
 
     dialog_host = ui.element("div")  # pop-ups live here, outside the cards that are rebuilt on refresh
 
@@ -506,12 +557,14 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     with ui.row().classes("items-center gap-3 no-wrap"):
                         ui.icon("vpn_key", color="warning", size="36px")
                         with ui.column().classes("gap-0"):
-                            ui.label("Earth Data Hub API Key Required").classes("text-body1 text-weight-bold text-amber-300")
-                            ui.label(
+                            banner_title = ui.label("Earth Data Hub API Key Required").classes(
+                                "text-body1 text-weight-bold text-amber-300")
+                            banner_text = ui.label(
                                 "An API key is required to inspect dataset variables, calculate request quotas, and download data."
                             ).classes("text-caption text-amber-100/80")
                     with ui.row().classes("items-center gap-2 no-wrap"):
-                        ui.button("Get API Key ↗", on_click=lambda: ui.navigate.to(QUOTA_URL, new_tab=True)).props(
+                        ui.button("Get API Key ↗", on_click=lambda: ui.navigate.to(
+                            CDS_KEY_URL if f["source"] == "cds" else QUOTA_URL, new_tab=True)).props(
                             "outline no-caps color=warning size=sm"
                         )
                         ui.button("Configure in Keys", icon="vpn_key", on_click=lambda: tabs.set_value(t_keys)).props(
@@ -524,18 +577,23 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- dataset
                         with section(1, "Dataset", icon="dataset", mark="dataset"):
+                            src_toggle = IconToggle({"edh": ("Earth Data Hub", "hub"),
+                                                     "cds": ("Climate Data Store", "cloud_queue")}, value="edh").props(
+                                "unelevated toggle-color=primary no-caps").classes("edh-toggle edh-tour-source")
                             with ui.row().classes("w-full items-center gap-3 no-wrap max-sm:flex-wrap"):
                                 coll_select = ui.select({"era5": "ERA5"}, value="era5", label="Collection").classes("w-48")
                                 ds_select = ui.select({}, label="Dataset", with_input=True).classes(
                                     "grow min-w-0 max-sm:order-last max-sm:basis-full")
                                 ui.button(icon="refresh", on_click=lambda: load_dataset(refresh=True)).props(
-                                    "flat round").tooltip("reload the structure from Earth Data Hub (a few requests)")
+                                    "flat round").tooltip("reload the dataset description from its source")
                             with ui.row().classes("w-full items-start gap-4 no-wrap max-sm:flex-wrap"):
                                 ds_image = ui.element("div")
                                 with ui.column().classes("gap-1 grow min-w-0"):
                                     ds_title = ui.label().classes("edh-subtitle")
                                     ds_chips = ui.row().classes("gap-2")
                             ds_info = ui.markdown().classes("text-body2 edh-muted")
+                            cds_box = ui.column().classes("w-full gap-3")  # CDS: tier, licences, dataset options
+                            cds_box.set_visibility(False)
 
                         # ---------- variables
                         with section(2, "Variables and levels", icon="layers", mark="variables"):
@@ -640,10 +698,22 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 area_map.clear_layers()
                                 area_map.tile_layer(url_template=OSM_TILES, options={
                                     "attribution": "&copy; OpenStreetMap contributors", "maxZoom": 19})
+                            with ui.row().classes("items-center gap-3") as grid_row:
+                                with_tip(ui.select(GRIDS, label="Grid").bind_value(f, "grid").classes("w-36"),
+                                         "Native keeps the dataset's own grid (ERA5: 0.25°, ERA5-Land: 0.1°). A coarser "
+                                         "grid is interpolated by the Climate Data Store before download: smaller "
+                                         "files, the same number of fields.")
+                                ui.number("Spacing (°)", min=0.05, step=0.05).bind_value(f, "grid_custom").classes(
+                                    "w-36").bind_visibility_from(f, "grid", lambda v: v == "custom")
+                            grid_row.set_visibility(False)
+                            area_note = ui.label().classes("text-caption text-warning")
+                            area_note.set_visibility(False)
 
                     # ---------- output
                     with section(5, "Output", wide=True, icon="folder", mark="output"):
-                        with ui.row().classes("w-full items-center justify-between pb-2 mb-2 border-b border-white/10"):
+                        files_note = ui.label().classes("text-body2 text-accent")
+                        files_note.set_visibility(False)
+                        with ui.row().classes("w-full items-center justify-between pb-2 mb-2 border-b border-white/10") as mode_row:
                             with ui.row().classes("items-center gap-2"):
                                 ui.label("Store mode").classes("text-body2 text-weight-medium")
                                 tip("Create a brand-new dataset or extend an existing Icechunk dataset forward or backward in time.")
@@ -654,7 +724,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         with ui.row().classes("w-full items-center gap-4 no-wrap max-md:flex-wrap") as new_store_row:
                             ui.input("Directory (on the server)").bind_value(f, "directory").classes("grow")
                             ui.input("Name").bind_value(f, "name").classes("w-64")
-                            with_tip(ui.select({"zarr": "Zarr", "both": "Zarr + Icechunk", "icechunk": "Icechunk only"},
+                            fmt_select = with_tip(ui.select({"zarr": "Zarr", "both": "Zarr + Icechunk", "icechunk": "Icechunk only"},
                                                label="Format").bind_value(f, "out_format").classes("w-48"),
                                      "Downloads are written to an Icechunk repository first: it makes jobs "
                                      "resumable. Zarr: export a plain Zarr v3 at the end and delete the repository. "
@@ -678,8 +748,14 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         extend_store_box.bind_visibility_from(f, "target_mode", lambda v: v == "extend")
                         out_paths = ui.label().classes("edh-mono text-caption edh-muted")
 
+                        with ui.row().classes("items-center gap-3") as cds_layout_row:
+                            with_tip(ui.select({"auto": "Automatic", "timeseries": "Time series", "maps": "Maps"},
+                                               label="Chunk layout").bind_value(f, "chunk_layout").classes("w-48"),
+                                     "Time series: long in time, small in space (cheap to read years at a point). "
+                                     "Maps: the whole area for a few steps. Automatic: balanced.")
+                        cds_layout_row.set_visibility(False)
                         # -- dataset structure: drawing + tree, updated live
-                        with ui.column().classes("w-full gap-3 edh-struct"):
+                        with ui.column().classes("w-full gap-3 edh-struct") as struct_box:
                             with ui.row().classes("w-full items-center justify-between gap-3"):
                                 ui.label("Dataset structure").classes("edh-subtitle")
                                 struct_kpis = ui.row().classes("items-center gap-2")
@@ -758,7 +834,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                                  "contact = name@example.org").bind_value(f, "extra_attrs")
                                      .props("rows=2").classes("w-full"),
                                      "One 'key = value' per line, added to the dataset's global attributes.")
-                        enc_box.bind_visibility_from(f, "out_format", lambda v: v != "icechunk")
+                        enc_box.bind_visibility_from(f, "out_format", lambda v: v != "icechunk" and not ctx.get("files_only"))
 
                 # ---------- summary (sticky)
                 with ui.card().classes("edh-card edh-summary edh-tour-summary w-[26rem] max-lg:w-full sticky shrink-0 "
@@ -766,13 +842,13 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         "top:80px;max-height:calc(100vh - 100px);overflow-y:auto"):
                     ui.label("Summary").classes("edh-title")
                     summary = ui.column().classes("gap-3 w-full")
-                    with ui.row().classes("w-full items-center gap-3 no-wrap"):
+                    with ui.row().classes("w-full items-center gap-3 no-wrap") as conn_row:
                         with_tip(ui.number("Connections", min=1, max=64, step=1).bind_value(
                             f, "connections").classes("w-32"),
                             "Chunks downloaded at the same time. Faster up to what your line and the server "
                             "allow; the sample suggests a value. Can be changed while the job runs.")
                         conn_hint = ui.column().classes("gap-0 grow")
-                    with ui.row().classes("w-full items-center gap-2 no-wrap edh-tour-sample"):
+                    with ui.row().classes("w-full items-center gap-2 no-wrap edh-tour-sample") as sample_row:
                         sample_btn = ui.button(f"Measure on a sample · {SAMPLE_REQUESTS} requests", icon="science").props(
                             "outline no-caps color=secondary").classes("grow")
                         tip(f"Uses quota: downloads {SAMPLE_REQUESTS} chunks of this selection ({SAMPLE_REQUESTS} requests) to "
@@ -795,13 +871,29 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                          "this; the job stops with an error rather than fill the disk.")
                             with_tip(ui.number("Memory (GB)", min=0.5, step=0.5).bind_value(f, "memory_gb").classes("w-full"),
                                      "RAM the processing and export may use at once. Lower it on a busy shared server.")
-                            with ui.row().classes("items-center gap-3 w-full no-wrap"):
+                            with ui.column().classes("w-full gap-3") as cds_settings:
+                                with_tip(ui.number("Requests waiting on the CDS", min=1, max=32, step=1).bind_value(
+                                    f, "max_inflight").classes("w-full"),
+                                    "How many requests may wait in the Climate Data Store queue at once. When the "
+                                    "CDS limits you, the job lowers this by itself and raises it again later. "
+                                    "Can be changed while the job runs.")
+                                with ui.row().classes("items-center gap-1 no-wrap"):
+                                    ui.toggle({"auto": "Fewest requests", "month": "One month each"}).bind_value(
+                                        f, "pack").props("dense no-caps unelevated toggle-color=primary").classes("edh-toggle")
+                                    tip("Fewest requests: whole months packed into one request up to the dataset's "
+                                        "cost limit; each request waits in the queue once, so this is usually much "
+                                        "faster. One month each: ECMWF's general advice for archived data.")
+                                with_tip(ui.number("Largest request (GB)", min=0.5, step=0.5).bind_value(
+                                    f, "max_request_gb").classes("w-full"),
+                                    "No request downloads more than this. Smaller requests mean more of them.")
+                            cds_settings.set_visibility(False)
+                            with ui.row().classes("items-center gap-3 w-full no-wrap") as quota_row:
                                 ui.label("Quota limit").classes("text-body2")
                                 ui.slider(min=0.1, max=1.0, step=0.05).bind_value(f, "quota_safety").props(
                                     "label color=secondary").classes("grow")
                                 ui.label().bind_text_from(f, "quota_safety", lambda v: f"{100 * (v or 0):.0f}%")
                                 tip("The job stops at this share of your monthly request quota.")
-                            with ui.row().classes("items-center gap-1 no-wrap"):
+                            with ui.row().classes("items-center gap-1 no-wrap") as wait_row:
                                 ui.switch("Wait for quota reset").bind_value(f, "wait_for_quota")
                                 tip("At the limit: wait for the reset on the 1st and continue. Off: pause the job.")
                     with ui.column().classes("w-full gap-3 edh-tour-launch"):
@@ -823,24 +915,34 @@ def build_page(be, local: bool = False, embedded: bool = False):
             keys_box = ui.column().classes("w-full gap-4 max-w-5xl mx-auto")
 
     # ------------------------------------------------------------------ dataset loading
+    def src_kw() -> dict:
+        """Backend arguments that name the source (none for Earth Data Hub: older servers know only that one)."""
+        return {"source": "cds"} if f["source"] == "cds" else {}
+
     async def load_collections():
+        cds = f["source"] == "cds"
         try:
-            cols = await be.call("collections")
+            cols = await be.call("collections", **src_kw())
+            coll_select.props(f'label="{"Category" if cds else "Collection"}"')
             coll_select.add_slot("option", option_template([c.get("thumbnail") for c in cols]))
-            coll_select.set_options({c["id"]: c["title"] for c in cols},
-                                    value=f["collection"] if f["collection"] in {c["id"] for c in cols} else "era5")
+            fallback = "Reanalysis" if cds else "era5"
+            coll_select.set_options({c["id"]: c["title"] + (f" · {c['count']}" if cds else "") for c in cols},
+                                    value=f["collection"] if f["collection"] in {c["id"] for c in cols} else fallback)
         except Exception as e:
             ui.notify(f"could not read the catalogue: {e}", type="negative")
         await load_items()
 
     async def load_items():
         try:
-            items = await be.call("datasets", collection=f["collection"])
+            items = await be.call("datasets", collection=f["collection"], **src_kw())
         except Exception as e:
             ui.notify(f"could not list datasets: {e}", type="negative")
             return
         ctx["items"] = {i["id"]: i for i in items}
-        ctx["thumbs"][f["collection"]] = {i["id"]: i.get("thumbnail") for i in items}
+        if f["source"] == "cds":
+            ctx["cds_thumbs"].update({i["id"]: i.get("thumbnail") for i in items})
+        else:
+            ctx["thumbs"][f["collection"]] = {i["id"]: i.get("thumbnail") for i in items}
         offered = [i for i in items if not i.get("deprecated")]
         ds_select.add_slot("option", option_template([i.get("thumbnail") for i in offered]))
         ds_select.options = {i["id"]: f"{i['title']}{OPTION_SEPARATOR}{i['id']}" for i in offered}
@@ -863,6 +965,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
         if not info:
             return
         show_dataset(info)
+        if f["source"] == "cds":
+            await load_cds_dataset(info, refresh)
+            return
         if not f["key"]:
             ds_info.content = (
                 "**Earth Data Hub API key required**: configure an API key in the **Keys** tab "
@@ -901,6 +1006,141 @@ def build_page(be, local: bool = False, embedded: bool = False):
         level_row.set_visibility(ds["levels"] is not None)
         on_vars_changed()
 
+    async def load_cds_dataset(info, refresh=False):
+        """A CDS dataset from its download form (public); with a key, also its licence status (free)."""
+        ds_info.content = "_reading the dataset's download form…_"
+        try:
+            d = await be.call("cds_describe", dataset=info["id"], key=f["key"], refresh=refresh)
+        except BackendError as e:
+            ds_info.content = f"**Could not read the dataset:** {e}"
+            return
+        if d["id"] != f["dataset"]:  # another dataset was chosen meanwhile
+            return
+        ctx["cds_desc"] = d
+        lv = d["levels"]
+        kind = "time × level × space" if lv else "time × space"
+        ds = {"summary": {"time": [info.get("start") or "", info.get("end") or ""], "levels": lv["values"] if lv else None},
+              "variables": [{"name": v["name"], "long_name": v["label"], "units": "", "kind": "level" if lv else "time",
+                             "default_stat": None} for v in d["variables"]],
+              "levels": lv["values"] if lv else None}
+        ds["vars"] = {v["name"]: v for v in ds["variables"]}
+        ctx["ds"], ctx["info"] = ds, info
+        ds_info.content = info.get("abstract", "")[:420]
+        t0, t1 = (info.get("start") or "")[:10], (info.get("end") or "")[:10]
+        ds_chips.clear()
+        with ds_chips:
+            parts = [f"{t0} to {t1}" if t0 else "", f"{len(d['variables'])} variables",
+                     f"{len(lv['values'])} levels" if lv else "",
+                     "area cut by the CDS" if d.get("area") else "whole domain delivered"]
+            ui.label(" · ".join(p for p in parts if p)).classes("edh-muted text-caption")
+        time_range_label.text = f"available {t0} → {t1}" if t0 else ""
+        rows = [{**v, "kind": kind} for v in ds["variables"]]
+        var_table.rows = rows
+        var_table.selected = [r for r in rows if r["name"] in f["variables"]]
+        var_table.update()
+        if lv:
+            level_select.props(f'label="{"Pressure levels (hPa)" if lv["field"] == "pressure_level" else lv["field"].replace("_", " ").capitalize()}"')
+            level_select.options = lv["values"]
+            level_select.value = [l for l in f["levels"] if l in lv["values"]]
+            level_select.update()
+        level_row.set_visibility(bool(lv))
+        render_cds_box(d)
+        apply_source_ui()
+        on_vars_changed()
+
+    def render_cds_box(d):
+        cds_box.clear()
+        with cds_box:
+            title, sub = TIER_TEXT.get(d["tier"], ("", ""))
+            with ui.row().classes("items-center gap-2"):
+                ui.badge(title).props("color=primary" if d["tier"] == "grib" else "color=grey-7")
+                ui.label(sub).classes("edh-muted text-caption")
+            labels = ", ".join(l["label"] for l in d["licences"])
+            missing = d.get("licences_missing")
+            url = CDS_DATASET_URL.format(d["id"])
+            if missing:
+                with ui.row().classes("items-start gap-2 no-wrap"):
+                    ui.icon("gpp_maybe", color="warning")
+                    ui.markdown(f"Accept the licence first: **{', '.join(l['label'] for l in missing)}**. Open the "
+                                f"[dataset page]({url}), accept it at the bottom of the Download tab, then reload "
+                                "the dataset here.").classes("text-caption text-warning")
+            elif missing is None and labels:
+                ui.label(f"Licence: {labels} (checked when a CDS key is set)").classes("edh-muted text-caption")
+            elif labels:
+                ui.label(f"Licence accepted: {labels}").classes("edh-muted text-caption")
+            if d["options"]:
+                ui.label("Dataset options").classes("text-body2 text-weight-medium")
+            with ui.row().classes("w-full gap-3"):
+                for o in d["options"]:
+                    cur = f["cds_options"].get(o["name"])
+                    if cur in (None, [], ""):
+                        cur = o["default"] or (o["values"][:1] if len(o["values"]) == 1 else [])
+                    cur = cur if isinstance(cur, list) else [cur]
+                    opts = {v: o["labels"].get(v, v) for v in o["values"]}
+
+                    def changed(e, n=o["name"]):
+                        f["cds_options"][n] = e.value
+                        schedule_plan()
+
+                    sel = ui.select(opts, label=o["label"], multiple=o["multiple"], with_input=len(opts) > 12,
+                                    value=[c for c in cur if c in opts] if o["multiple"] else (cur[0] if cur and cur[0] in opts else None),
+                                    on_change=changed).props(
+                        "dense outlined" + (" use-chips" if o["multiple"] else "")).classes("min-w-[14rem]")
+                    if o.get("help"):
+                        with_tip(sel, re.sub(r"<[^>]+>", " ", o["help"])[:500])
+            for n in d["notes"][:2]:
+                with ui.expansion("Notes from the CDS about this dataset", icon="info").classes("w-full edh-expansion"):
+                    ui.markdown(re.sub(r"<[^>]+>", " ", n)[:3000]).classes("text-caption")
+
+    def apply_source_ui():
+        """Show what applies to the chosen source (and, for the CDS, to the chosen dataset)."""
+        cds = f["source"] == "cds"
+        d = ctx.get("cds_desc") if cds else None
+        tier = d["tier"] if d else None
+        files = bool(cds and tier and tier != "grib")
+        ctx["files_only"] = files
+        cds_box.set_visibility(cds and d is not None)
+        grid_row.set_visibility(bool(cds and tier == "grib" and d.get("area")))
+        note = ""
+        if d and tier == "grib" and not d.get("area"):
+            note = ("This dataset is delivered for its whole domain: the area is cut after the download, so the "
+                    "download size does not depend on it.")
+        elif d and tier == "timeseries":
+            note = "This dataset gives one time series per point: choose Points."
+        area_note.text = note
+        area_note.set_visibility(bool(note))
+        files_note.text = (f"Saved as the files the Climate Data Store delivers, in {f['directory']}/{f['name']}.files "
+                           "with a manifest.json listing each request.") if files else ""
+        files_note.set_visibility(files)
+        fmt_select.set_visibility(not files)
+        struct_box.set_visibility(not cds)
+        cds_layout_row.set_visibility(cds and not files)
+        mode_row.set_visibility(not cds)
+        if cds:
+            f["target_mode"] = "create"
+        for el in (conn_row, sample_row, quota_row, wait_row):
+            el.set_visibility(not cds)
+        cds_settings.set_visibility(cds)
+
+    async def switch_source(e):
+        v = e.value
+        if not v or v == f["source"]:
+            return
+        ctx["sel"][f["source"]] = (f["collection"], f["dataset"])
+        f["source"] = v
+        f["collection"], f["dataset"] = ctx["sel"][v]
+        f.update(variables=[], levels=[], stats={}, cds_options={}, chunk_layout="auto" if v == "cds" else None)
+        ctx.update(ds=None, info=None, cds_desc=None, plan=None)
+        var_table.rows, var_table.selected = [], []
+        var_table.update()
+        level_row.set_visibility(False)
+        ds_chips.clear()
+        apply_source_ui()
+        await refresh_keys_select()
+        await load_collections()
+
+    src_toggle.on_value_change(switch_source)
+
     async def on_collection(e):
         if e.value and e.value != f["collection"]:
             f["collection"] = e.value
@@ -908,6 +1148,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
     async def on_dataset(e):
         if e.value and (e.value != f["dataset"] or not ctx["info"] or ctx["info"]["id"] != e.value):
+            if e.value != f["dataset"]:
+                f["cds_options"] = {}
             f["dataset"] = e.value
             await load_dataset()
 
@@ -939,13 +1181,19 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 v = ds["vars"].get(name)
                 if v is None or v["kind"] == "static":
                     continue
-                cur = f["stats"].get(name) or [v["default_stat"]]
+                cds = f["source"] == "cds"
+                cur = f["stats"].get(name) or ([] if cds else [v["default_stat"]])
                 with ui.row().classes("items-center gap-3"):
-                    ui.label(name).classes("w-20 edh-mono")
+                    ui.label(name).classes("w-56 edh-mono" if cds else "w-20 edh-mono")
                     out = ui.label().classes("edh-muted text-caption edh-mono")
 
-                    def show(vals, n=name, out=out):
+                    def show(vals, n=name, out=out, cds=cds):
                         vals = vals or []
+                        if cds:
+                            out.text = ("Default: sum for accumulations, mean otherwise" if not vals else
+                                        "Output named after the GRIB field" + ("" if len(vals) == 1 else
+                                        ", " + ", ".join(f"…_{x}" for x in vals)))
+                            return
                         out.text = "Output: " + (n if len(vals) == 1 else ", ".join(f"{n}_{x}" for x in vals))
 
                     def changed(e, n=name, show=show):
@@ -1096,9 +1344,19 @@ def build_page(be, local: bool = False, embedded: bool = False):
         info = ctx.get("info") or {}
         pts = parse_points(f["points"] or "") if f["mode"] == "points" else []
         custom = layout_choice() == "custom"
+        cds = f["source"] == "cds"
+        grid = None
+        if cds and f["grid"] != "native":
+            g = float(f["grid_custom"] or 0.5) if f["grid"] == "custom" else float(f["grid"])
+            grid = [g, g]
         return JobSpec(
-            dataset=f["dataset"], collection=f["collection"], dataset_url=info.get("url"),
-            variables=list(f["variables"]), levels=list(f["levels"]) or None,
+            source=f["source"],
+            dataset=f["dataset"], collection=f["collection"], dataset_url=None if cds else info.get("url"),
+            variables=list(f["variables"]),
+            levels=([float(x) for x in f["levels"]] if cds else list(f["levels"])) or None,
+            cds=CdsSpec(grid=grid, options={k: v for k, v in f["cds_options"].items() if v not in (None, [], "")},
+                        max_inflight=int(f["max_inflight"] or 4), pack=f["pack"],
+                        max_request_gb=float(f["max_request_gb"] or 10)),
             time=TimeSpec(start=f["start"], end=f["end"], start_hour=int(f["start_hour"] or 0),
                           end_hour=int(23 if f["end_hour"] is None else f["end_hour"]), freq=f["freq"], hours=int(f["hours"] or 1),
                           tz_offset=int(f["tz_offset"] or 0),
@@ -1140,7 +1398,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
         summary.clear()
         with summary:
             if not f.get("key"):
-                ui.label("⚠️ Earth Data Hub API key required. Add your key in the Keys tab to view request cost and plan downloads.").classes("text-amber-400 font-medium")
+                ui.label("⚠️ Climate Data Store key required. Add your token in the Keys tab to check licences and "
+                         "costs and to download." if f["source"] == "cds" else
+                         "⚠️ Earth Data Hub API key required. Add your key in the Keys tab to view request cost and plan downloads.").classes("text-amber-400 font-medium")
                 launch_btn.disable()
                 return
             if f.get("target_mode") == "extend" and not (f.get("target_store") or "").strip():
@@ -1158,6 +1418,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
             except (BackendError, ValueError) as e:
                 res = {"ok": False, "error": str(e)}
             if seq != ctx["plan_seq"]:
+                return
+            if res["ok"] and f["source"] == "cds":
+                ctx["plan"] = res
+                render_cds_summary(res, spec_)
                 return
             if not res["ok"]:
                 ctx["plan"] = None
@@ -1182,6 +1446,83 @@ def build_page(be, local: bool = False, embedded: bool = False):
         else:
             out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
         launch_btn.enable()
+
+    def render_cds_summary(res, spec_):
+        s = res["summary"]
+        summary.clear()
+        blocked = []
+        with summary:
+            with ui.row().classes("w-full items-center gap-4 no-wrap"):
+                lim = s["largest_request"]
+                share = (lim["cost"] or lim["fields"]) / lim["limit"] if lim["limit"] else 0
+                ui.circular_progress(value=min(1.0, share), show_value=False, size="84px",
+                                     color="positive" if share <= 1 else "negative").props(
+                    "thickness=0.18 track-color=grey-9")
+                with ui.column().classes("gap-0"):
+                    ui.label(f"{s['requests']:,}").classes("edh-kpi-value")
+                    ui.label("request" + ("s" if s["requests"] != 1 else "") + " to the CDS queue").classes("edh-muted")
+                    ui.label(f"largest uses {100 * share:.0f}% of the dataset's limit"
+                             + ("" if res["checked"] else " (local count)")).classes("text-caption edh-muted")
+            with ui.grid(columns=2).classes("w-full gap-3"):
+                kpi("Download", f"≈ {human_bytes(s['download_bytes_est'])}" if s["download_bytes_est"] else "—",
+                    "estimate · GRIB, 16 bits a value" if s["download_bytes_est"] else "known after the first file")
+                kpi("Fields", f"{s['fields']:,}", "variables × levels × time steps")
+                kpi("Time steps", f"{s['steps']:,}" if s["steps"] else "—", "from the CDS")
+                kpi("Queue", "live", "each request waits its turn; the job shows it")
+            if s["first"]:
+                kv("Period", f"{s['first'][:16]} → {s['last'][:16]}")
+            kv("Area", "N {} · W {} · S {} · E {}".format(*s["area"]) if s["area"] else
+               "whole domain (cut after download)" if f["mode"] != "global" else "global")
+            kv("Grid", s["grid"].split("/")[0] + "°" if s["grid"] else "native")
+            if s["levels"]:
+                kv("Levels", ", ".join(s["levels"]))
+            opts = {k: v for k, v in s["options"].items() if k not in ("data_format", "format")}
+            if opts:
+                kv("Options", "; ".join(f"{k}: {', '.join(v) if isinstance(v, list) else v}" for k, v in opts.items()))
+            if res["licences_missing"]:
+                blocked.append("Accept the licence first: " + ", ".join(l["label"] for l in res["licences_missing"])
+                               + " (on the dataset page of the CDS, Download tab).")
+            for i, bad in list((res["invalid"] or {}).items())[:3]:
+                blocked.append(f"Request {int(i) + 1} asks for data the dataset does not have: "
+                               + "; ".join(f"{k} {', '.join(v)}" for k, v in bad.items()))
+            if s["tier"] == "table":
+                blocked.append("In-situ observation tables cannot be downloaded into a store by this app.")
+            for b in blocked:
+                with ui.row().classes("items-start gap-2 no-wrap"):
+                    ui.icon("error_outline", color="negative", size="xs")
+                    ui.label(b).classes("text-caption text-negative")
+            if res["note"]:
+                ui.label(res["note"]).classes("text-caption text-warning")
+            if alt := res.get("alternative"):
+                with ui.row().classes("items-center gap-2 no-wrap"):
+                    ui.icon("bolt", color="accent", size="xs")
+                    ui.label(f"Faster for points: {alt['dataset']}, {alt['requests']} request(s). {alt['note']}."
+                             ).classes("text-caption text-accent grow")
+                    ui.button("Use it", on_click=lambda a=alt["dataset"]: use_dataset(a)).props(
+                        "flat dense no-caps color=accent")
+            for w in s["warnings"]:
+                with ui.row().classes("items-start gap-2 no-wrap"):
+                    ui.icon("warning_amber", color="warning", size="xs")
+                    ui.label(w).classes("text-caption text-warning")
+            with ui.expansion(f"Requests ({s['requests']:,})", icon="list").classes("w-full edh-expansion"):
+                rows = [{"n": r["index"] + 1, "period": f"{r['start'][:10]} → {r['end'][:10]}",
+                         "fields": f"{r['fields']:,}", "size": human_bytes(r["bytes_est"]) if r["bytes_est"] else "—"}
+                        for r in res["requests"][:200]]
+                ui.table(columns=[{"name": k, "label": l, "field": k, "align": "left" if k == "period" else "right"}
+                                  for k, l in (("n", "#"), ("period", "Period"), ("fields", "Fields"), ("size", "Size"))],
+                         rows=rows, row_key="n").props("dense flat").classes("w-full edh-table")
+        o = spec_.output
+        if ctx.get("files_only"):
+            out_paths.text = f"→ {o.directory}/{o.name}.files"
+        else:
+            out_paths.text = "→ " + "   ·   ".join(str(p) for p, keep in ((spec_.zarr_path, o.export_zarr),
+                                                                          (spec_.icechunk_path, o.keep_icechunk)) if keep)
+        launch_btn.set_enabled(not blocked)
+
+    def use_dataset(ds_id):
+        """Switch to another CDS dataset of the same category (the time-series alternative)."""
+        if ds_id in ds_select.options:
+            ds_select.value = ds_id
 
     def render_summary(plan):
         smp = plan["sample"]
@@ -1429,7 +1770,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             jobs_announce.set_text(". ".join(changed))
         balances: dict = {}  # API key -> status, read once per refresh
         for s_ in jobs:
-            if s_.get("alive") or s_.get("status") in ("completed", "unreadable") or not s_.get("spec"):
+            if s_.get("alive") or s_.get("status") in ("completed", "unreadable") or not s_.get("spec") or is_cds(s_):
                 continue
             dl = s_["spec"].get("download") or {}
             name = dl.get("key")
@@ -1448,7 +1789,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     s_["_struct_err"] = str(e)
         for s_ in jobs:
             s_["_ago"] = time_ago(s_.get("finished_at") if s_.get("status") == "completed" else s_.get("updated_at"))
-            if spec_ := s_.get("spec"):
+            if (spec_ := s_.get("spec")) and spec_.get("source") == "cds":
+                s_["_thumb"] = ctx["cds_thumbs"].get(spec_.get("dataset"))
+            elif spec_ := s_.get("spec"):
                 coll = spec_.get("collection", "era5")
                 s_["_thumb"] = ctx["thumbs"].get(coll, {}).get(spec_.get("dataset"))
                 if coll not in ctx["thumbs"] and coll not in ctx["thumbs_asked"]:  # off the refresh: may be slow
@@ -1506,6 +1849,11 @@ def build_page(be, local: bool = False, embedded: bool = False):
         st = s.get("status", "?")
         total = s.get("units_total") or 0
         done = len(s.get("units_done", []))
+        cds = is_cds(s)
+        counts = s.get("cds_requests") or {}
+        if cds and not total:  # files-only job: progress is files downloaded
+            total = s.get("requests_total") or 0
+            done = counts.get("downloaded", 0) + counts.get("done", 0)
         color = STATUS_COLOR.get(st, "grey-6")
         tail, forecast = job_forecast(s) if st == "running" else ("", "")
         with ui.row().classes("w-full items-baseline justify-between no-wrap gap-4"):
@@ -1528,27 +1876,51 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 ui.label(cost).classes("text-caption max-w-prose " + ("text-warning" if short else "edh-muted"))
         with ui.row().classes("w-full gap-3 items-center pt-1"):
             with ui.element("div").classes("edh-job-tiles"):  # fixed slots: a value sits in the same place on every card
-                kpi("Units", f"{done:,}/{total:,}")
-                req_total = s.get("requests_total")
-                req_done = ((s.get("requests_job", 0) or 0) + (s.get("requests_run", 0) or 0)
-                            if st in ACTIVE else s.get("requests_job", 0) or 0)
-                if req_total:
-                    kpi("Requests", f"{req_done:,}", f"of {req_total:,}")
-                if st == "waiting_quota":
-                    r = next_reset()
-                    kpi("Resumes", f"{r.day} {r:%b}", f"after {r:%H:%M} UTC")
-                elif st in ACTIVE:
-                    kpi("Speed", f"{human_bytes(s.get('rate_bps') or 0)}/s", f"{s.get('req_rate') or 0:.1f} req/s")
-                    kpi("Temporary files", human_bytes(s.get("spool_bytes") or 0))
-                if st == "completed":
-                    if s.get("output_bytes"):
-                        kpi("Output size", human_bytes(s["output_bytes"]))
-                    if s.get("_ago"):
-                        kpi("Finished", f"{s['_ago']} ago", s["finished_at"][:16].replace("T", " ") + " UTC")
+                if cds:
+                    _cds_tiles(s, st, counts)
+                else:
+                    _edh_tiles(s, st, done, total)
             caption = ("Estimate at the current speed." if tail and not forecast else
                        s.get("message") or "" if st == "exporting" else "")
             if caption:
                 ui.label(caption).classes("edh-muted text-caption grow min-w-0")
+
+    def _edh_tiles(s, st, done, total):
+        kpi("Units", f"{done:,}/{total:,}")
+        req_total = s.get("requests_total")
+        req_done = ((s.get("requests_job", 0) or 0) + (s.get("requests_run", 0) or 0)
+                    if st in ACTIVE else s.get("requests_job", 0) or 0)
+        if req_total:
+            kpi("Requests", f"{req_done:,}", f"of {req_total:,}")
+        if st == "waiting_quota":
+            r = next_reset()
+            kpi("Resumes", f"{r.day} {r:%b}", f"after {r:%H:%M} UTC")
+        elif st in ACTIVE:
+            kpi("Speed", f"{human_bytes(s.get('rate_bps') or 0)}/s", f"{s.get('req_rate') or 0:.1f} req/s")
+            kpi("Temporary files", human_bytes(s.get("spool_bytes") or 0))
+        if st == "completed":
+            if s.get("output_bytes"):
+                kpi("Output size", human_bytes(s["output_bytes"]))
+            if s.get("_ago"):
+                kpi("Finished", f"{s['_ago']} ago", s["finished_at"][:16].replace("T", " ") + " UTC")
+
+    def _cds_tiles(s, st, counts):
+        total = s.get("requests_total") or 0
+        got = counts.get("downloaded", 0) + counts.get("done", 0)
+        if s.get("units_total"):
+            kpi("Units", f"{len(s.get('units_done', [])):,}/{s['units_total']:,}", "committed")
+        kpi("Requests", f"{got:,}/{total:,}", "downloaded")
+        if st in ACTIVE:
+            kpi("On the CDS", f"{s.get('cds_waiting') or 0} waiting · {s.get('cds_running') or 0} running",
+                f"up to {s.get('cds_inflight_cap') or '?'} at once")
+            wait = s.get("cds_oldest_wait_s")
+            kpi("Longest wait", human_duration(wait) if wait else "—", "in the CDS queue")
+            kpi("Downloaded", human_bytes(s.get("bytes_run") or 0))
+        if st == "completed":
+            if s.get("output_bytes"):
+                kpi("Output size", human_bytes(s["output_bytes"]))
+            if s.get("_ago"):
+                kpi("Finished", f"{s['_ago']} ago", s["finished_at"][:16].replace("T", " ") + " UTC")
 
     def _job_outputs(s):
         """A finished output, with the code that opens it; only the paths for anything else."""
@@ -1567,8 +1939,25 @@ def build_page(be, local: bool = False, embedded: bool = False):
         if others:
             ui.label("Also saved: " + "  ·  ".join(others)).classes("edh-mono text-caption edh-muted")
 
+    def _queue_menu(s, d, spec):
+        """CDS jobs: how many requests may wait on the CDS at once."""
+        with ui.button("Queue", icon="tune").props("flat no-caps"):
+            with ui.menu().classes("edh-menu") as menu:
+                with ui.row().classes("items-center gap-2 no-wrap p-3"):
+                    n = ui.number("Requests waiting on the CDS",
+                                  value=(spec.get("cds") or {}).get("max_inflight", 4), min=1, max=32).props(
+                        "dense outlined").classes("w-56")
+
+                    async def apply():
+                        menu.close()
+                        await act("job_inflight", "queue size updated", jid=d, n=max(1, min(32, int(n.value or 1))))
+
+                    ui.button("Apply", on_click=apply).props("flat no-caps")
+
     def _connections_menu(s, d, spec):
         """Rarely changed, so kept out of the card until asked for."""
+        if is_cds(s):
+            return _queue_menu(s, d, spec)
         with ui.button("Connections", icon="tune").props("flat no-caps"):
             with ui.menu().classes("edh-menu") as menu:
                 with ui.row().classes("items-center gap-2 no-wrap p-3"):
@@ -1720,6 +2109,18 @@ def build_page(be, local: bool = False, embedded: bool = False):
     def clone(sp: dict):
         spec_ = JobSpec.from_dict(sp)
         t, a, o, dl = spec_.time, spec_.area, spec_.output, spec_.download
+        src = spec_.source or "edh"
+        switched = src != f["source"]
+        if switched:
+            ctx["sel"][f["source"]] = (f["collection"], f["dataset"])
+        g = spec_.cds.grid
+        gs = "native" if not g else (f"{g[0]:g}" if f"{g[0]:g}" in GRIDS else "custom")
+        f.update(source=src, cds_options=dict(spec_.cds.options), grid=gs, grid_custom=g[0] if g else 0.5,
+                 max_inflight=spec_.cds.max_inflight, pack=spec_.cds.pack, max_request_gb=spec_.cds.max_request_gb)
+        if src == "cds":
+            f["levels"] = [f"{x:g}" for x in (spec_.levels or [])]
+        src_toggle.value = src  # f["source"] already says so: the handler leaves the form alone
+        ctx["keysel"][src] = dl.key
         f.update(collection=spec_.collection, dataset=spec_.dataset, variables=spec_.variables,
                  levels=spec_.levels or [], start=t.start, end=t.end, start_hour=t.start_hour, end_hour=t.end_hour, freq=t.freq, hours=t.hours,
                  tz_offset=t.tz_offset, stats=dict(t.stats), mode=a.mode, west=a.west, south=a.south, east=a.east,
@@ -1735,10 +2136,18 @@ def build_page(be, local: bool = False, embedded: bool = False):
                  key=dl.key or ctx["keys"]["default"], connections=dl.connections, spool_dir=dl.spool_dir or "",
                  max_spool_gb=dl.max_spool_gb, min_free_gb=dl.min_free_gb, quota_safety=dl.quota_safety,
                  wait_for_quota=dl.wait_for_quota, memory_gb=dl.memory_gb)
+        if src == "cds":
+            f["levels"] = [f"{x:g}" for x in (spec_.levels or [])]
+            f["chunk_layout"] = o.chunk_layout if o.chunk_layout in ("auto", "timeseries", "maps") else "auto"
         coll_select.value = spec_.collection
         ds_select.value = spec_.dataset
         tabs.set_value(t_new)
-        ui.timer(0.1, load_items, once=True)
+        apply_source_ui()
+        if switched:
+            later(refresh_keys_select)
+            ui.timer(0.1, load_collections, once=True)
+        else:
+            ui.timer(0.1, load_items, once=True)
 
     ui.timer(3.0, lambda: refresh_jobs() if tabs.value in (t_jobs, "Jobs") else None)
     tabs.on_value_change(lambda e: refresh_jobs() if e.value in (t_jobs, "Jobs") else
@@ -1948,7 +2357,8 @@ _WATCHED = ("start", "end", "start_hour", "end_hour", "freq", "hours", "tz_offse
             "lon_convention", "directory", "name", "out_format", "target_mode", "target_store", "extend_direction", "keepbits", "lossless", "chunk_layout",
             "chunk_time", "chunk_lat", "chunk_lon", "chunk_points", "dtype", "compressor", "clevel", "shuffle",
             "sharding", "shard_auto", "shard_time", "shard_space", "extra_attrs", "connections",
-            "quota_safety", "wait_for_quota", "memory_gb", "key")
+            "quota_safety", "wait_for_quota", "memory_gb", "key", "grid", "grid_custom", "max_inflight", "pack",
+            "max_request_gb")
 
 
 def _watch_form(f, ctx, schedule_plan, render_stats, draw_rect):
