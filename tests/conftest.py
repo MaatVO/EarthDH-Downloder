@@ -127,6 +127,9 @@ def cds(fake_cds_server, home, monkeypatch):
     from edh_downloader import keys
 
     fake_cds_server.reset()
+    from edh_downloader import service
+
+    service._CDS_COSTS.clear()
     monkeypatch.setenv("EDH_DL_CDS_API", fake_cds_server.api)
     keys.add_key("cds-test", TOKEN, provider="cds")
     return fake_cds_server

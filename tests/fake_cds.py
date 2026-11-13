@@ -55,6 +55,7 @@ class FakeCDS:
                                                                 "revision": 12}]
             self.limits = {"reanalysis-era5-pressure-levels": 60000.0, "reanalysis-cerra-single-levels": 90000.0}
             self.file_size = 2000
+            self.cost_factor = 1.0  # > 1: the server counts more fields than the client expects
 
     # ------------------------------------------------------------ helpers
     def _status(self, j: dict) -> str:
@@ -142,10 +143,20 @@ class FakeCDS:
             flaky()
             inputs = (await req.json())["inputs"]
             cost = 1
-            for k, v in inputs.items():  # like CDS: every list counts, except area/location (grid does!)
-                if isinstance(v, list) and k not in ("area", "location"):
+            # like CDS: every list counts, except area/location (a grid list does!); dates count only when real
+            dates = ("year", "month", "day")
+            for k, v in inputs.items():
+                if isinstance(v, list) and k not in ("area", "location") + dates:
                     cost *= len(v)
-            return web.json_response({"id": "size", "cost": float(cost),
+            if all(isinstance(inputs.get(k), list) for k in dates):
+                import calendar
+                cost *= sum(1 for y in inputs["year"] for m in inputs["month"] for d in inputs["day"]
+                            if int(d) <= calendar.monthrange(int(y), int(m))[1])
+            else:
+                for k in dates:
+                    if isinstance(inputs.get(k), list):
+                        cost *= len(inputs[k])
+            return web.json_response({"id": "size", "cost": float(cost) * self.cost_factor,
                                       "limit": self.limits.get(req.match_info["id"], 121000.0)})
 
         async def constraints(req):

@@ -109,6 +109,8 @@ class CdsSpec:
     grid: list[float] | None = None  # output grid spacing [dlat, dlon] in degrees, regridded by CDS; None = native
     options: dict = field(default_factory=dict)  # other request fields of the dataset form (product_type, ...)
     max_inflight: int = 4  # requests waiting or running on CDS at once (lowered automatically when CDS limits it)
+    pack: str = "auto"  # "auto": whole months packed up to the cost limit (fewest requests); "month": one month each
+    max_request_gb: float = 10.0  # largest download one request may produce
 
 
 @dataclass

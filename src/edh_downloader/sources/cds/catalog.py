@@ -125,7 +125,14 @@ def form(dataset_id: str, refresh: bool = False) -> list[dict]:
 
 def constraints(dataset_id: str, refresh: bool = False) -> list[dict]:
     async def fetch():
-        c = await _get_json(f"{api()}/catalogue/v1/collections/{dataset_id}/constraints.json")
+        import aiohttp
+
+        try:
+            c = await _get_json(f"{api()}/catalogue/v1/collections/{dataset_id}/constraints.json")
+        except aiohttp.ClientResponseError as e:
+            if e.status == 404:  # no constraints published: nothing is excluded
+                return []
+            raise
         return [e for e in c if isinstance(e, dict)] if isinstance(c, list) else []
 
     return _cached(f"cds_constraints_{dataset_id}.json", fetch, refresh)
@@ -220,6 +227,8 @@ def describe(dataset_id: str, refresh: bool = False) -> dict:
     return {
         "id": dataset_id,
         "title": (summary or {}).get("title", dataset_id),
+        "start": (summary or {}).get("start"),  # the catalogue's time coverage
+        "end": (summary or {}).get("end"),
         "tier": _tier(ws, formats, summary),
         "variables": variables,
         "levels": levels,

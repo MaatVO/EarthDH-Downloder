@@ -189,6 +189,18 @@ def main(argv=None):
         from . import sources
 
         spec = JobSpec.load(a.job_file)
+        if spec.source == sources.CDS:
+            from . import service
+
+            r = service.cds_plan(spec.to_dict())
+            if not r["ok"]:
+                sys.exit(f"cannot plan: {r['error']}")
+            _p({k: v for k, v in r.items() if k != "requests"})
+            for q in r["requests"]:
+                print(f"{q['index']:>4}  {q['start'][:10]} .. {q['end'][:10]}  {q['fields']:>7} fields"
+                      + (f"  cost {q['cost']:g}" if q["cost"] is not None else "")
+                      + (f"  ~{q['bytes_est'] / 1e9:.2f} GB" if q["bytes_est"] else ""))
+            return
         key = keys.get_key(spec.download.key, sources.require_jobs(spec.source).id)
         info = catalog.dataset_info(spec)
         ds = catalog.load_dataset(info["url"], key.secret, counter=RequestCounter(key.fingerprint), info=info)

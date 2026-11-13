@@ -94,6 +94,9 @@ def canonical(inputs: dict) -> dict:
         v = inputs[k]
         if v is None or v == [] or v == "":
             continue
+        if k == "grid" and isinstance(v, (list, tuple)):
+            # "dx/dy": CDS regrids the same, but counts a list's length as fields (twice the cost, checked live)
+            v = "/".join(str(x) for x in v)
         out[k] = _canon_value(k, v)
     return out
 

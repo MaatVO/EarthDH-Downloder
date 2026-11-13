@@ -181,8 +181,86 @@ def _plan(spec: dict) -> Plan:
 
 # ------------------------------------------------------------------ plan, sample
 
+CDS_SHAPES_CHECKED = 12  # costing calls per plan at most (one per distinct request size)
+_CDS_COSTS: dict[tuple[str, str], dict] = {}  # (dataset, request hash) -> costing answer: the form plans often
+
+
+def cds_plan(spec: dict) -> dict:
+    """The CDS requests a spec needs, checked for free: the dataset's real cost limit and the cost of each
+    distinct request size (costing), the constraints (local), the licences (one call). Needs no queue."""
+    from .sources.cds import catalog as cds_catalog
+    from .sources.cds.client import CDSClient, CDSError
+    from .sources.cds.planner import DEFAULT_LIMIT, CdsPlan
+    from .util import read_json, write_json_atomic
+    from .paths import cache_dir
+
+    try:
+        s = JobSpec.from_dict(spec)
+        desc = cds_catalog.describe(s.dataset)
+        table = cds_catalog.constraints(s.dataset)
+        limits_path = cache_dir() / "cds_limits.json"
+        limits = read_json(limits_path, {}, dict)
+        p = CdsPlan(s, desc, table, limit=float(limits.get(s.dataset) or DEFAULT_LIMIT))
+    except (PlanError, ValueError, KeyError) as e:
+        return {"ok": False, "error": str(e)}
+    k = _key(s.download.key, sources.CDS)
+    checked, missing, note = False, None, None
+
+    async def check(p):
+        async with CDSClient(k.secret, retries=2) as c:
+            async def costing(r):
+                key = (s.dataset, r.hash)
+                if key not in _CDS_COSTS:
+                    _CDS_COSTS[key] = await c.costing(s.dataset, r.inputs)
+                    while len(_CDS_COSTS) > 5000:
+                        del _CDS_COSTS[next(iter(_CDS_COSTS))]
+                return _CDS_COSTS[key]
+
+            have = await c.licences() if desc["licences"] else set()
+            biggest = max(p.requests, key=lambda r: r.fields)
+            first = await costing(biggest)
+            if first["limit"] and first["limit"] != p.limit:  # plan again with the dataset's own limit
+                limits[s.dataset] = first["limit"]
+                write_json_atomic(limits_path, limits)
+                p = CdsPlan(s, desc, table, limit=first["limit"])
+            for _ in range(2):
+                costs: dict[int, float] = {}
+                for r in sorted(p.requests, key=lambda r: -r.fields):
+                    if r.fields not in costs and len(costs) < CDS_SHAPES_CHECKED:
+                        costs[r.fields] = (await costing(r))["cost"]
+                for r in p.requests:
+                    r.cost = costs.get(r.fields)
+                over = max((r.cost / r.fields for r in p.requests if r.cost and r.fields), default=1.0)
+                if all(r.cost is None or r.cost <= p.limit for r in p.requests) or over <= 1:
+                    break
+                # CDS counts more than the local estimate: plan with a proportionally smaller limit, once
+                p = CdsPlan(s, desc, table, limit=p.limit / over)
+                p.limit = first["limit"] or p.limit
+            return p, [l for l in desc["licences"] if (l["id"], l["revision"]) not in have]
+
+    if k is None:
+        note = "add a Climate Data Store key to check the costs and licences"
+    else:
+        try:
+            p, missing = asyncio.run(check(p))
+            checked = True
+        except CDSError as e:
+            note = f"costs not checked: {e}"
+    alt = None
+    if s.area.mode == "points" and desc["tier"] == "grib":
+        ts = f"{s.dataset}-timeseries"
+        if any(d["id"] == ts for d in cds_catalog.datasets()):
+            alt = {"dataset": ts, "requests": len(s.area.points),
+                   "note": "time series for points come from a faster archive: one request per point"}
+    return {"ok": True, "summary": p.summary(), "requests": [r.to_dict() for r in p.requests[:500]],
+            "invalid": p.invalid(), "licences_missing": missing, "checked": checked, "note": note,
+            "alternative": alt}
+
+
 def plan(spec: dict, connections: int, follow: bool) -> dict:
     """Everything the form shows about a spec: summary, chunk layouts, size estimates, dataset structure."""
+    if spec.get("source") == sources.CDS:
+        return cds_plan(spec)
     try:
         p = _plan(spec)
     except (PlanError, ValueError) as e:
@@ -334,5 +412,5 @@ def store_inspect(path: str) -> dict:
 
 METHODS = {f.__name__: f for f in (
     hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
-    collections, datasets, cds_describe, cds_check, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
+    collections, datasets, cds_describe, cds_check, cds_plan, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
     job_connections, job_delete, job_log, store_structure, store_inspect)}
