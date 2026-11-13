@@ -1,10 +1,12 @@
 <div align="center">
 
-# EDH Downloader
+<img src="docs/logo.svg" alt="A man sitting on the Earth squeezes the sun; its juice falls as pixels into a glass jar that fills up as a heatmap" width="200">
 
-### A powerful, resumable downloader for Earth Data Hub and Copernicus Climate Data Store datasets.
+# Weather Dataset Downloader
 
-Download, subset, aggregate and store large-scale climate and meteorological datasets in **Icechunk and Zarr v3**, through an interactive web interface or command-line workflow.
+### Squeeze the weather out of the sky, straight into a dataset.
+
+A resumable downloader for weather and climate datasets from **Earth Data Hub** and the **Copernicus Climate Data Store**. Pick the variables, the period, the area and the grid; get an analysis-ready **Icechunk** or **Zarr v3** store, through a web interface or the command line.
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Zarr](https://img.shields.io/badge/Zarr-v3-orange)](https://zarr.dev/)
@@ -13,7 +15,7 @@ Download, subset, aggregate and store large-scale climate and meteorological dat
 [![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/EarthDH-Downloder/build.yml?label=build)](.github/workflows/build.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/MaatVO/EarthDH-Downloder)](https://github.com/MaatVO/EarthDH-Downloder/releases)
 
-[Features](#features) · [Installation](#installation) · [Getting Started](#getting-started) · [Climate Data Store](#climate-data-store) · [CLI](#command-line-interface) · [Output](#output-formats) · [Architecture](#architecture)
+[Sources](#data-sources) · [Features](#features) · [Installation](#installation) · [Getting Started](#getting-started) · [Climate Data Store](#climate-data-store) · [CLI](#command-line-interface) · [Output](#output-formats) · [Architecture](#architecture) · [How it works](docs/README.md)
 
 </div>
 
@@ -21,27 +23,41 @@ Download, subset, aggregate and store large-scale climate and meteorological dat
 
 ## Overview
 
-**EDH Downloader** is a Python application designed to make downloading and preparing large-scale Earth observation and climate datasets from [Earth Data Hub](https://earthdatahub.destine.eu/) and the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) straightforward, efficient and reproducible.
+**Weather Dataset Downloader** turns "I need these variables, over this region and period, at this resolution" into an analysis-ready dataset on your disk or your server, without pulling whole archives and without wasting your API allowance or your place in a queue.
+
+It started as a downloader for [Earth Data Hub](https://earthdatahub.destine.eu/) (as *EDH Downloader*). With the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) added as a second source, it is now a general tool for weather and climate datasets: one interface, one job model and one output format, whatever the source.
 
 It provides an interactive web interface, a command-line interface and a remote execution workflow over SSH.
 
-Rather than downloading entire datasets, users can precisely define their data requirements, estimate download costs, select spatial and temporal subsets, configure aggregation strategies and choose how their data should be stored.
+Rather than downloading entire datasets, you define exactly what you need, see what it will cost before starting, select spatial and temporal subsets, configure aggregation and choose how the data is stored.
 
-Downloads run as independent background jobs. They can be interrupted, resumed or monitored without keeping the browser open or maintaining an active SSH connection.
+Downloads run as independent background jobs. They can be interrupted, resumed or monitored without keeping the browser open or keeping an SSH connection alive.
 
-### Why EDH Downloader?
+### Why?
 
-Working with large meteorological datasets often involves more than retrieving files. It requires managing API quotas, selecting relevant variables, extracting spatial subsets, handling temporal resolutions and organizing data into formats suitable for scientific computing.
+Getting weather data for an analysis is rarely just "downloading a file". Each provider has its own API, its own limits and its own formats: Earth Data Hub counts every chunk against a monthly quota, the Climate Data Store queues every request and slows down clients that send too many. On top of that you need the right variables, a spatial subset, a time resolution, and a layout that is fast to read in Xarray.
 
-EDH Downloader brings these operations together in a single workflow.
+Weather Dataset Downloader handles the provider side (requests, quotas, queues, retries, resuming) so you only describe the data you want.
+
+## Data sources
+
+Choose the source first; the catalogue, the API key and the download strategy follow it.
+
+| | Earth Data Hub | Copernicus Climate Data Store |
+|---|---|---|
+| Datasets | ERA5 single and pressure levels, ERA5-Land, daily and monthly products | Every CDS dataset: ERA5, ERA5-Land, CERRA, CARRA, derived products, CMIP6 and more |
+| Access | Direct reads of Zarr chunks | Queued requests, produced by the CDS, then downloaded |
+| Limit | 500,000 requests per month | A cost limit per request, and throttling of busy clients |
+| Strategy | Fetch only the chunks the selection touches; track the quota | Pack the selection into the fewest requests the limits allow; never send one twice |
+| Formats | Zarr | GRIB and NetCDF |
 
 ## Features
 
 ### 🌍 Dataset discovery and selection
 
-- Browse available datasets directly from the Earth Data Hub catalogue.
-- Discover variables and pressure levels from live STAC metadata and Zarr store structures.
-- Support for ERA5 Single Levels, ERA5 Pressure Levels, ERA5-Land and monthly/daily products.
+- Browse the Earth Data Hub and Climate Data Store catalogues from the same screen.
+- Discover variables and pressure levels from live metadata (STAC and Zarr for Earth Data Hub, the dataset forms and constraints for the CDS).
+- ERA5 single and pressure levels, ERA5-Land, CERRA, CARRA, daily and monthly statistics, projections and other derived products.
 - Inspect available temporal and spatial coordinates before downloading.
 
 ### 📅 Flexible temporal selection
@@ -79,17 +95,14 @@ Understand the cost of a download before starting it.
 
 The planning engine estimates:
 
-- Number of API requests (source chunks).
+- Number of API requests (source chunks on Earth Data Hub, queued requests on the CDS).
 - Expected download size.
 - Expected output size.
-- Remaining monthly API quota.
+- Remaining monthly API quota (Earth Data Hub).
+- The cost of each CDS request against the dataset's limit, priced for free by the CDS itself.
 - Estimated storage requirements.
 
-An optional sampling operation downloads a selection of real source chunks to measure actual transfer speeds, compression ratios and output sizes.
-
-It can also recommend a suitable number of parallel connections.
-
-Sampling uses 12 real API requests and requires explicit confirmation.
+For Earth Data Hub jobs, an optional sampling operation downloads a selection of real source chunks to measure actual transfer speeds, compression ratios and output sizes, and recommends a number of parallel connections. Sampling uses 12 real API requests and requires explicit confirmation.
 
 ### ⚡ Resumable background downloads
 
@@ -102,13 +115,13 @@ Downloads are designed to be robust, even when working with large datasets or un
 - Dynamically change the number of parallel connections.
 - Recover interrupted jobs without downloading already committed chunks again.
 
-Each download is organized into processing units aligned with the source data's chunk structure.
+Each download is organized into processing units aligned with the source data's chunk structure (Earth Data Hub) or with the requests sent (CDS).
 
 Every completed unit is committed to Icechunk, providing a reliable checkpoint for recovery.
 
 ### 🧊 Modern scientific storage
 
-EDH Downloader uses [Icechunk](https://icechunk.io/) as its transactional storage layer and supports exporting datasets to standard [Zarr v3](https://zarr.dev/) stores.
+Weather Dataset Downloader uses [Icechunk](https://icechunk.io/) as its transactional storage layer and supports exporting datasets to standard [Zarr v3](https://zarr.dev/) stores.
 
 Features include:
 
@@ -139,7 +152,7 @@ The interface runs locally on your computer, while computation, API keys, downlo
 
 ### 🖥️ Cross-platform standalone application
 
-EDH Downloader can be distributed as a standalone executable.
+Weather Dataset Downloader can be distributed as a standalone executable.
 
 Pre-built releases are provided through GitHub Releases for:
 
@@ -166,6 +179,8 @@ Launch the application:
 ```
 
 On Windows, launch the downloaded executable.
+
+The command is still called `edh-dl`, from the project's first name; existing jobs, keys and servers keep working.
 
 The application opens a connection page in your browser, where you can select a remote server or run everything locally.
 
@@ -216,9 +231,9 @@ edh-dl
 
 The first time you open the application, it offers a short guided tour of the whole procedure, from the SSH connection to the download. You can skip it, and replay it at any time from **Tour** in the top bar.
 
-### 1. Configure your Earth Data Hub API key
+### 1. Configure your API keys
 
-Obtain an API key from [Earth Data Hub](https://earthdatahub.destine.eu/).
+Obtain an API key from [Earth Data Hub](https://earthdatahub.destine.eu/), the [Climate Data Store](https://cds.climate.copernicus.eu/), or both.
 
 You can configure it through the application's **Keys** tab or using the CLI:
 
@@ -300,7 +315,7 @@ Jobs remain available when you reconnect to the application.
 
 ## Remote Execution
 
-EDH Downloader supports two approaches to remote execution.
+Weather Dataset Downloader supports two approaches to remote execution.
 
 ### A. Using the desktop application
 
@@ -314,7 +329,7 @@ The recommended workflow is to run the standalone application on your local comp
 
 The first connection automatically prepares the required Python environment on the remote server.
 
-The server does not need a manually installed copy of EDH Downloader.
+The server does not need a manually installed copy of the application.
 
 The application creates an environment under:
 
@@ -328,7 +343,7 @@ Existing SSH configuration is respected, including aliases, users, ports, keys a
 
 ### B. Using the SSH launcher
 
-For environments where you prefer not to run the desktop application, EDH Downloader provides a lightweight SSH launcher.
+For environments where you prefer not to run the desktop application, the application provides a lightweight SSH launcher.
 
 On macOS, Linux or WSL:
 
@@ -368,13 +383,13 @@ Closing the launcher terminates the connection and remote interface, but **does 
 
 ---
 
-## API Quota Management
+## Earth Data Hub Quota
 
 Earth Data Hub provides free API access with a monthly allowance of **500,000 requests**.
 
 Each source chunk retrieved counts as one request.
 
-EDH Downloader includes its own quota accounting system to help manage consumption.
+The application includes its own quota accounting system to help manage consumption.
 
 Usage is tracked per API key and calendar month in:
 
@@ -422,7 +437,7 @@ Every CDS dataset can be browsed. What the application does with it depends on w
 | Dataset kind | Examples | Result |
 |---|---|---|
 | GRIB fields | ERA5, ERA5-Land, CERRA, CARRA | Full pipeline: area, statistics, Icechunk and Zarr |
-| NetCDF products | most derived and projection datasets | The files as the CDS produces them, in `<name>.files/` with a `manifest.json` |
+| NetCDF products | most derived and projection datasets (ERA5 daily statistics, CMIP6 …) | Full pipeline once every file is downloaded: the files' own variable names, times and levels. Files that are not a grid one store can hold (station tables, two products for the same time) are kept as delivered, in `<name>.files/` with a `manifest.json` that says why |
 | Time series | ERA5 time series at a point | One file per point, in `<name>.files/` |
 | In-situ tables | station observations | Not available |
 
@@ -432,15 +447,17 @@ Regional datasets on a projected grid, such as CERRA (Lambert conformal, 1069 ×
 
 Most CDS datasets require accepting a licence once, on the dataset's page on the CDS website. The application shows whether your key has accepted it, links to the page, and refuses to start a job that would be rejected.
 
-### GRIB support
+### GRIB and NetCDF support
 
 GRIB is decoded with [ecCodes](https://confluence.ecmwf.int/display/ECC). It is included in the standalone application and installed with the package (`eccodes` and, on Linux and macOS, the `eccodeslib` wheel: glibc 2.28 or newer on Linux, macOS 15 or newer). On a server where ecCodes cannot be installed, Earth Data Hub jobs still work; CDS jobs on GRIB datasets stop with an error explaining that ecCodes is missing.
+
+NetCDF is read with [netCDF4](https://unidata.github.io/netcdf4-python/) (NetCDF3 and NetCDF4 files; zip and tar results are unpacked first). It is installed with the package and on servers in the same way, separately from ecCodes. Times in other calendars (`noleap`, `360_day`, as CMIP6 uses) are stored on the standard calendar. NetCDF products are converted only once all their files are there, because the time axis and the variable names come from the files; the Output section shows the input format and what the job makes of it.
 
 ---
 
 ## Command-Line Interface
 
-In addition to the web interface, EDH Downloader provides a CLI for scripting, automation and headless workflows.
+In addition to the web interface, the application provides a CLI for scripting, automation and headless workflows.
 
 ### Dataset discovery
 
@@ -531,7 +548,7 @@ packaging/build.sh
 
 ## Output Formats
 
-EDH Downloader supports two complementary storage formats.
+Weather Dataset Downloader supports two complementary storage formats, whatever the source.
 
 ### Icechunk
 
@@ -626,7 +643,7 @@ This provides useful provenance information for downstream scientific workflows.
 
 Choosing an appropriate chunk layout is important when working with large multidimensional datasets.
 
-EDH Downloader includes a chunk-layout comparison step that evaluates four strategies:
+The application includes a chunk-layout comparison step that evaluates four strategies:
 
 | Strategy | Recommended use |
 |---|---|
@@ -664,7 +681,9 @@ Additional options include compression levels, shuffle filters, optional shardin
 
 ## Architecture
 
-EDH Downloader is organized around a modular download and processing pipeline.
+The [documentation](docs/README.md) explains every part in detail, with diagrams: the [architecture](docs/architecture.md), [jobs](docs/jobs.md), the [Earth Data Hub](docs/earth-data-hub.md) and [Climate Data Store](docs/climate-data-store.md) pipelines, [storage](docs/storage.md), [remote use](docs/remote.md), [keys and quota](docs/keys-and-quota.md) and [releases](docs/releases.md).
+
+Weather Dataset Downloader is organized around a modular download and processing pipeline. Each source plugs in its own catalogue, planner and engine; everything from decoding onwards is shared.
 
 ```text
                   ┌──────────────────────┐
@@ -673,23 +692,27 @@ EDH Downloader is organized around a modular download and processing pipeline.
                   └──────────┬───────────┘
                              │
                   ┌──────────▼───────────┐
-                  │       Catalog        │
-                  │  STAC + Zarr Metadata│
+                  │   Catalog (source)   │
+                  │ EDH: STAC + Zarr     │
+                  │ CDS: forms + limits  │
                   └──────────┬───────────┘
                              │
                   ┌──────────▼───────────┐
-                  │       Planner        │
-                  │ Selection & Chunking │
+                  │   Planner (source)   │
+                  │ EDH: chunk indices   │
+                  │ CDS: fewest requests │
                   └──────────┬───────────┘
                              │
                   ┌──────────▼───────────┐
-                  │        Engine        │
-                  │ Async Chunk Download │
+                  │   Engine (source)    │
+                  │ EDH: async chunks    │
+                  │ CDS: queue + ledger  │
                   └──────────┬───────────┘
                              │
                   ┌──────────▼───────────┐
                   │      Processor       │
-                  │ Decode / Cut /       │
+                  │ Decode (Zarr, GRIB,  │
+                  │ NetCDF) / Cut /      │
                   │ Aggregate / Write    │
                   └──────────┬───────────┘
                              │
@@ -708,9 +731,11 @@ EDH Downloader is organized around a modular download and processing pipeline.
 
 | Component | Responsibility |
 |---|---|
-| `catalog` | Reads STAC catalogue information and consolidated Zarr metadata. |
+| `sources` | Registry of data sources: what each one can browse and download. |
+| `catalog` | Reads Earth Data Hub STAC catalogue information and consolidated Zarr metadata. |
 | `planner` | Translates user selections into source chunk indices and processing units. |
 | `engine` | Downloads source chunks asynchronously using configurable parallel connections. |
+| `sources.cds` | Climate Data Store catalogue, request planner, request ledger and queue, GRIB and NetCDF decoding. |
 | `processor` | Decodes, subsets, aggregates and writes data into Icechunk. |
 | `store` | Handles storage operations and Zarr export. |
 | `runner` | Launches and manages detached background workers. |
@@ -743,7 +768,7 @@ This allows large downloads to run without requiring the entire dataset to fit i
 
 ## Testing
 
-The project includes automated tests using a local mock Earth Data Hub implementation.
+The project includes automated tests against a local mock Earth Data Hub and a local fake Climate Data Store.
 
 Run the test suite with:
 
@@ -751,7 +776,7 @@ Run the test suite with:
 uv run pytest
 ```
 
-Tests do not consume Earth Data Hub API quota. CDS jobs are tested end to end against a local fake CDS (queue, throttling, failures, expired results, real GRIB files), so no test sends a request to the Climate Data Store.
+Tests do not consume Earth Data Hub API quota. CDS jobs are tested end to end against a local fake CDS (queue, throttling, failures, expired results, real GRIB files, CMIP6-like NetCDF files and zips), so no test sends a request to the Climate Data Store.
 
 For offline development, set:
 
@@ -770,7 +795,7 @@ This prevents the application from performing uncached metadata requests, making
 - Daily sums of accumulated ERA5 variables use the observations whose `valid_time` falls within the selected day. This corresponds to hours 00–23 UTC, adjusted for the configured UTC offset. ECMWF daily totals conventionally use hours 01–24, so an appropriate offset should be applied when reproducing that convention.
 - CDS queue waits are outside the application's control and vary from seconds to hours for the same request, so the application does not forecast how long a CDS job takes; the job card shows the waits as they happen.
 - CDS results stay available for a limited time (a few days). A job paused for longer requests them again, which is usually served by the CDS cache.
-- CDS NetCDF and time-series datasets are saved as delivered files, not converted to Zarr.
+- CDS time-series datasets, in-situ tables and NetCDF files that are not a grid are saved as delivered files, not converted to Zarr.
 - API quota tracking is maintained locally and cannot automatically account for requests made by external applications.
 - The desktop application requires SSH access to remote servers. The remote environment requires Python 3.12 or newer, with `uv` used when available or `python3 -m venv` as a fallback.
 
@@ -778,11 +803,12 @@ This prevents the application from performing uncached metadata requests, making
 
 ## Credits and Acknowledgements
 
-EDH Downloader builds upon the open scientific data ecosystem and the infrastructure provided by:
+Weather Dataset Downloader builds upon the open scientific data ecosystem and the infrastructure provided by:
 
 - **[Earth Data Hub](https://earthdatahub.destine.eu/)** — data access, catalogue services and underlying meteorological datasets.
 - **[Copernicus Climate Data Store](https://cds.climate.copernicus.eu/)** — catalogue and retrieve services for the Copernicus climate datasets.
 - **[ecCodes](https://confluence.ecmwf.int/display/ECC)** — GRIB decoding.
+- **[netCDF4](https://unidata.github.io/netcdf4-python/)** — NetCDF reading (CDS products without GRIB).
 - **[Zarr](https://zarr.dev/)** — scalable storage for multidimensional scientific data.
 - **[Icechunk](https://icechunk.io/)** — transactional storage and versioning for chunked scientific datasets.
 - **[Xarray](https://xarray.dev/)** — tools for working with labelled multidimensional arrays.
@@ -799,9 +825,9 @@ See [LICENSE](LICENSE) for the full license text.
 
 <div align="center">
 
-**Built for efficient access to large-scale Earth data.**
+**Squeeze the sun. Keep the data.**
 
-If you find EDH Downloader useful, consider giving the project a ⭐ on GitHub.
+If you find Weather Dataset Downloader useful, consider giving the project a ⭐ on GitHub.
 
 [Repository](https://github.com/MaatVO/EarthDH-Downloder) · [Issues](https://github.com/MaatVO/EarthDH-Downloder/issues) · [Releases](https://github.com/MaatVO/EarthDH-Downloder/releases)
 

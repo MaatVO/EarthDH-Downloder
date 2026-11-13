@@ -25,7 +25,7 @@ from ..runner import ACTIVE
 from ..quota import next_reset
 from ..job import COMPRESSORS, FREQS, STATS, AreaSpec, CdsSpec, DownloadSpec, JobSpec, OutputSpec, Point, TimeSpec
 from ..util import human_bytes, human_duration
-from . import structure, tour
+from . import logo, structure, tour
 from .auth import TokenMiddleware
 from .theme import PINK, apply_theme
 
@@ -594,9 +594,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
     # ================================================================ header
     with ui.header().classes("edh-header items-center justify-between px-3 sm:px-6 py-2"):
         with ui.row().classes("items-center gap-3 no-wrap"):
-            ui.html('<div class="edh-logo"><span class="material-icons">public</span></div>', sanitize=False)
+            ui.html(logo.img(), sanitize=False)
             with ui.column().classes("gap-0"):
-                ui.label("EDH Downloader").classes("edh-brand").props("role=heading aria-level=1")
+                ui.label("Weather Dataset Downloader").classes("edh-brand").props("role=heading aria-level=1")
                 ui.label(f"Earth Data Hub and Climate Data Store → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
         with ui.tabs().props("no-caps dense indicator-color=transparent active-class=edh-tab-active"
                              ).classes("edh-tabs edh-tour-tabs") as tabs:
@@ -2884,7 +2884,7 @@ def serve(host: str = "127.0.0.1", port: int = 8765, token: bool = True, stdio: 
     if stdio:
         _stdio_threads(port)
     else:
-        print("EDH Downloader web UI")
+        print("Weather Dataset Downloader web UI")
         print(f"  {url}")
         if over_ssh:
             h = default_host()
@@ -2898,5 +2898,5 @@ def serve(host: str = "127.0.0.1", port: int = 8765, token: bool = True, stdio: 
         else:
             show = path if open_browser is not False else False
         print("  Jobs keep running after you stop this server (Ctrl+C) or disconnect.", flush=True)
-    ui.run(host=host, port=port, title="EDH Downloader", show=show, reload=False, favicon="🌍", dark=True,
+    ui.run(host=host, port=port, title="Weather Dataset Downloader", show=show, reload=False, favicon=logo.PNG_DATA_URL, dark=True,
            show_welcome_message=False, storage_secret=secrets.token_hex(16), uvicorn_logging_level="warning")

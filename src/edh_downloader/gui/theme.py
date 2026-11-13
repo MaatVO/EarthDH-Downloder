@@ -29,7 +29,8 @@ html, body {{ background: var(--edh-bg) !important; color: var(--edh-text); font
 
 /* header */
 .edh-header {{ background: var(--edh-surface) !important; box-shadow: none !important; }}
-.edh-logo {{ display: none; }}
+.edh-logo {{ display: block; flex: none; width: 40px; height: 40px; border-radius: 9px; user-select: none; }}
+.edh-logo-sm {{ width: 24px; height: 24px; border-radius: 5px; }}
 .edh-brand {{ font-weight: 500; font-size: 1.1rem; }}
 .edh-tabs .q-tab {{ border-radius: var(--edh-r); margin: 0 2px; padding: 0 16px; min-height: 36px; color: var(--edh-muted); }}
 .edh-tab-active {{ background: var(--edh-surface-2); color: var(--edh-text) !important; }}

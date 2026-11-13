@@ -1,6 +1,6 @@
 ---
-name: EDH Downloader
-description: A flat, dark instrument panel for planning and watching large Earth Data Hub downloads.
+name: Weather Dataset Downloader
+description: A flat, dark instrument panel for planning and watching large weather dataset downloads from Earth Data Hub and the Climate Data Store.
 colors:
   signal-blue: "#4c8dff"
   on-signal: "#12161c"
@@ -125,13 +125,13 @@ components:
     rounded: "{rounded.field}"
 ---
 
-# Design System: EDH Downloader
+# Design System: Weather Dataset Downloader
 
 ## Overview
 
 **Creative North Star: "The Instrument Panel"**
 
-EDH Downloader looks like a quiet dark panel of labelled controls and readouts. Nothing on it is decoration: every element either sets a value or reports one. A researcher configures one consequential job here and later glances back to see how it is doing, so the surface stays calm, exact and unshowy, and trust comes from precision and legibility rather than from visual effect.
+Weather Dataset Downloader looks like a quiet dark panel of labelled controls and readouts. Nothing on it is decoration: every element either sets a value or reports one. A researcher configures one consequential job here and later glances back to see how it is doing, so the surface stays calm, exact and unshowy, and trust comes from precision and legibility rather than from visual effect.
 
 The panel is built from three tonal steps of slate, one lit colour and solid fills. Signal Blue marks where action or selection is. Green, amber and red appear only when they are reporting a state. Numbers are the most prominent content on screen wherever a decision or a check-in depends on them.
 

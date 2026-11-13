@@ -61,7 +61,7 @@ def connect(host: str, cmd: str = "edh-dl", tries: int = 5) -> int:
                 line = line.rstrip("\n")
                 if line.startswith(READY):
                     url = f"http://localhost:{lport}/?token={token}"
-                    print(f"EDH Downloader: {url}\nOpened in your browser. Ctrl+C closes it "
+                    print(f"Weather Dataset Downloader: {url}\nOpened in your browser. Ctrl+C closes it "
                           "(download jobs keep running on the server).", flush=True)
                     webbrowser.open(url)
                 elif line.startswith(BUSY):
@@ -82,7 +82,7 @@ def connect(host: str, cmd: str = "edh-dl", tries: int = 5) -> int:
 # ------------------------------------------------------------------ standalone scripts (only ssh needed)
 
 SH = r"""#!/bin/sh
-# EDH Downloader launcher: opens the web UI of edh-dl on the server in your browser, through SSH.
+# Weather Dataset Downloader launcher: opens the web UI of edh-dl on the server in your browser, through SSH.
 # Needs only ssh (macOS, Linux, WSL). Usage:  ./edh-connect [user@host]
 # Ctrl+C closes the UI; download jobs keep running on the server.
 HOST="${1:-__HOST__}"
@@ -104,7 +104,7 @@ for try in 1 2 3 4 5; do
     while IFS= read -r line; do
       case "$line" in
         EDH_DL_READY*) URL="http://localhost:$LPORT/?token=$TOKEN"
-                       echo "EDH Downloader: $URL"
+                       echo "Weather Dataset Downloader: $URL"
                        echo "Opened in your browser. Ctrl+C closes it (download jobs keep running on the server)."
                        open_url "$URL" ;;
         EDH_DL_PORT_BUSY*) rc=75 ;;
@@ -118,7 +118,7 @@ for try in 1 2 3 4 5; do
 done
 """
 
-PS1 = r"""# EDH Downloader launcher for Windows: opens the web UI of edh-dl on the server in your browser, through SSH.
+PS1 = r"""# Weather Dataset Downloader launcher for Windows: opens the web UI of edh-dl on the server in your browser, through SSH.
 # Needs the OpenSSH client (built into Windows 10/11). Run:  powershell -ExecutionPolicy Bypass -File edh-connect.ps1
 # Ctrl+C closes the UI; download jobs keep running on the server.
 param([string]$Server = "__HOST__")
@@ -142,7 +142,7 @@ for ($try = 0; $try -lt 5; $try++) {
   while ($null -ne ($line = $p.StandardOutput.ReadLine())) {
     if ($line.StartsWith("EDH_DL_READY")) {
       $url = "http://localhost:$LPort/?token=$Token"
-      Write-Host "EDH Downloader: $url"
+      Write-Host "Weather Dataset Downloader: $url"
       Write-Host "Opened in your browser. Ctrl+C closes it (download jobs keep running on the server)."
       Start-Process $url
     } elseif ($line.StartsWith("EDH_DL_PORT_BUSY")) { $busy = $true }

@@ -1,7 +1,7 @@
 [project]
 name = "edh-downloader"
 version = "0.2.0"
-description = "Download Earth Data Hub (ERA5) subsets to Icechunk/Zarr, with a web UI and detached jobs"
+description = "Weather Dataset Downloader: download weather and climate dataset subsets from Earth Data Hub and the Copernicus Climate Data Store to Icechunk/Zarr, with a web UI and detached jobs"
 readme = "README.md"
 authors = [
     { name = "Mattia Varagnolo" }

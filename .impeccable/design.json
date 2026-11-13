@@ -1,0 +1,409 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-09T13:41:04+00:00",
+  "title": "Design System: Weather Dataset Downloader",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#4c8dff",
+        "tonalRamp": [
+          "#000826",
+          "#001f5a",
+          "#013995",
+          "#1959c6",
+          "#3d7ded",
+          "#6fa4ff",
+          "#accafe",
+          "#e6efff"
+        ]
+      },
+      "on-signal": {
+        "role": "primary",
+        "displayName": "On Signal",
+        "canonical": "#12161c",
+        "tonalRamp": [
+          "#090b0e",
+          "#22252b",
+          "#3e4249",
+          "#5d6269",
+          "#7d838b",
+          "#a0a5ad",
+          "#c6c9ce",
+          "#edeef0"
+        ]
+      },
+      "engaged-blue": {
+        "role": "primary",
+        "displayName": "Engaged Blue",
+        "canonical": "#26406b",
+        "tonalRamp": [
+          "#030b1b",
+          "#102446",
+          "#27416d",
+          "#46618f",
+          "#6683b3",
+          "#8ba6d3",
+          "#b9cae6",
+          "#e9eff7"
+        ]
+      },
+      "deep-housing": {
+        "role": "neutral",
+        "displayName": "Deep Housing",
+        "canonical": "#12161c",
+        "tonalRamp": [
+          "#090b0e",
+          "#22252b",
+          "#3e4249",
+          "#5d6269",
+          "#7d838b",
+          "#a0a5ad",
+          "#c6c9ce",
+          "#edeef0"
+        ]
+      },
+      "panel-slate": {
+        "role": "neutral",
+        "displayName": "Panel Slate",
+        "canonical": "#1a2029",
+        "tonalRamp": [
+          "#090b0f",
+          "#20252d",
+          "#3c424d",
+          "#5b626d",
+          "#7b838e",
+          "#9fa6b0",
+          "#c5c9d0",
+          "#edeef0"
+        ]
+      },
+      "inset-slate": {
+        "role": "neutral",
+        "displayName": "Inset Slate",
+        "canonical": "#232b37",
+        "tonalRamp": [
+          "#080b10",
+          "#1f252f",
+          "#3a434f",
+          "#596270",
+          "#798392",
+          "#9da6b3",
+          "#c4cad2",
+          "#edeef1"
+        ]
+      },
+      "readout-white": {
+        "role": "neutral",
+        "displayName": "Readout White",
+        "canonical": "#e6e9ee",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232528",
+          "#404246",
+          "#5f6166",
+          "#808287",
+          "#a3a5a9",
+          "#c8c9cc",
+          "#eeeeef"
+        ]
+      },
+      "legend-grey": {
+        "role": "neutral",
+        "displayName": "Legend Grey",
+        "canonical": "#98a2b0",
+        "tonalRamp": [
+          "#080b10",
+          "#1f262f",
+          "#3a434f",
+          "#59626f",
+          "#7a8391",
+          "#9da6b2",
+          "#c4cad1",
+          "#edeff1"
+        ]
+      },
+      "nominal-green": {
+        "role": "status",
+        "displayName": "Nominal Green",
+        "canonical": "#3ecf8e",
+        "tonalRamp": [
+          "#000f06",
+          "#002e1a",
+          "#004f31",
+          "#01744a",
+          "#029b64",
+          "#45bf86",
+          "#9bdab6",
+          "#e1f4e9"
+        ]
+      },
+      "caution-amber": {
+        "role": "status",
+        "displayName": "Caution Amber",
+        "canonical": "#f2b84b",
+        "tonalRamp": [
+          "#120900",
+          "#332100",
+          "#573c01",
+          "#7f5901",
+          "#a97808",
+          "#ce9b3d",
+          "#e3c593",
+          "#f7edde"
+        ]
+      },
+      "fault-red": {
+        "role": "status",
+        "displayName": "Fault Red",
+        "canonical": "#ef5f6b",
+        "tonalRamp": [
+          "#1f0003",
+          "#4c0010",
+          "#7f0020",
+          "#af1f38",
+          "#d84958",
+          "#f8777e",
+          "#feb2b3",
+          "#ffe8e8"
+        ]
+      },
+      "chunk-magenta": {
+        "role": "data",
+        "displayName": "Chunk Magenta",
+        "canonical": "#ef2b89",
+        "tonalRamp": [
+          "#1d000b",
+          "#490025",
+          "#7b0141",
+          "#b00360",
+          "#e51c81",
+          "#ff68a4",
+          "#ffaec8",
+          "#fee8ee"
+        ]
+      },
+      "chunk-violet": {
+        "role": "data",
+        "displayName": "Chunk Violet",
+        "canonical": "#7b34db",
+        "tonalRamp": [
+          "#100028",
+          "#2f0060",
+          "#52019f",
+          "#7429d2",
+          "#9454fa",
+          "#b08cff",
+          "#cebdfe",
+          "#f0ebfe"
+        ]
+      },
+      "shard-violet": {
+        "role": "data",
+        "displayName": "Shard Violet",
+        "canonical": "#c58cff",
+        "tonalRamp": [
+          "#140025",
+          "#360058",
+          "#581987",
+          "#793fac",
+          "#9b62d1",
+          "#bc8af0",
+          "#d7bbf8",
+          "#f3eafd"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "The numbers that matter: request counts, sizes, ETA, quota used."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles and the product name in the header."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Sub-sections inside a card."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text and field values."
+      },
+      "column-label": {
+        "displayName": "Column Label",
+        "purpose": "Table headers."
+      },
+      "readout-label": {
+        "displayName": "Readout Label",
+        "purpose": "The name above a readout."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Helper text, quota status and job summaries."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Job IDs, output paths, chunk shapes, file paths, log lines."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid Signal Blue; the main action in a view.",
+      "html": "<button class=\"ds-btn-primary\">Launch job</button>",
+      "css": ".ds-btn-primary{font-family:Roboto, system-ui, sans-serif;font-size:14px;font-weight:500;letter-spacing:0;padding:4px 16px;min-height:36px;border-radius:3px;cursor:pointer;background:var(--edh-accent, #4c8dff);color:var(--edh-bg, #12161c);border:0;}.ds-btn-primary:hover,.ds-btn-primary:focus-visible{filter:brightness(1.12);}.ds-btn-primary:disabled{background:var(--edh-surface-2, #232b37);color:var(--edh-muted, #98a2b0);cursor:default;filter:none;}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Thin outline for the secondary action beside a primary.",
+      "html": "<button class=\"ds-btn-outline\">Measure on a sample · 12 requests</button>",
+      "css": ".ds-btn-outline{font-family:Roboto, system-ui, sans-serif;font-size:14px;font-weight:500;letter-spacing:0;padding:4px 16px;min-height:36px;border-radius:3px;cursor:pointer;background:transparent;color:var(--edh-accent, #4c8dff);border:1px solid currentColor;}.ds-btn-outline:hover,.ds-btn-outline:focus-visible{background:rgba(255,255,255,.1);}"
+    },
+    {
+      "name": "Flat Button",
+      "kind": "button",
+      "refersTo": "button-flat",
+      "description": "Text-only action for presets and light actions.",
+      "html": "<button class=\"ds-btn-flat\">Europe</button>",
+      "css": ".ds-btn-flat{font-family:Roboto, system-ui, sans-serif;font-size:14px;font-weight:500;letter-spacing:0;padding:4px 16px;min-height:36px;border-radius:3px;cursor:pointer;background:transparent;color:var(--edh-accent, #4c8dff);border:0;}.ds-btn-flat:hover,.ds-btn-flat:focus-visible{background:rgba(255,255,255,.1);}"
+    },
+    {
+      "name": "Segmented Toggle",
+      "kind": "custom",
+      "refersTo": "segmented-toggle",
+      "description": "Mutually exclusive modes on an Inset Slate track.",
+      "html": "<div class=\"ds-toggle\" role=\"group\"><button>Global</button><button class=\"ds-on\" aria-pressed=\"true\">Box</button><button>Points</button></div>",
+      "css": ".ds-toggle{display:inline-flex;background:var(--edh-surface-2, #232b37);border-radius:var(--edh-r, 6px);}.ds-toggle button{font-family:Roboto, system-ui, sans-serif;font-size:14px;font-weight:500;height:36px;padding:0 16px;border:0;background:transparent;color:#fff;border-radius:var(--edh-r, 6px);cursor:pointer;}.ds-toggle button:hover,.ds-toggle button:focus-visible{background:rgba(255,255,255,.1);}.ds-toggle .ds-on,.ds-toggle .ds-on:hover{background:var(--edh-accent, #4c8dff);color:var(--edh-bg, #12161c);}"
+    },
+    {
+      "name": "Outlined Field",
+      "kind": "input",
+      "refersTo": "field-outlined",
+      "description": "Dense outlined input with a small label above the value.",
+      "html": "<label class=\"ds-field\"><span>Name</span><input value=\"era5_subset\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;justify-content:center;height:40px;padding:0 12px;border:1px solid rgba(255,255,255,.7);border-radius:4px;font-family:Roboto, system-ui, sans-serif;}.ds-field span{font-size:10.5px;color:rgba(255,255,255,.7);}.ds-field input{background:transparent;border:0;outline:0;color:#fff;font-size:14px;padding:0;}.ds-field:hover{border-color:#fff;}.ds-field:focus-within{border:2px solid var(--edh-accent, #4c8dff);padding:0 11px;}"
+    },
+    {
+      "name": "Navigation Tab",
+      "kind": "nav",
+      "refersTo": "nav-tab",
+      "description": "Icon above label; the active tab is an Inset Slate block.",
+      "html": "<nav class=\"ds-tabs\"><a href=\"#\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z\"/></svg>New job</a><a href=\"#\" class=\"ds-active\" aria-current=\"page\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z\"/></svg>Jobs</a></nav>",
+      "css": ".ds-tabs{display:inline-flex;gap:4px;background:var(--edh-surface, #1a2029);padding:8px;}.ds-tabs a{display:flex;flex-direction:column;align-items:center;padding:4px 16px;border-radius:var(--edh-r, 6px);font-family:Roboto, system-ui, sans-serif;font-size:14px;color:var(--edh-muted, #98a2b0);text-decoration:none;}.ds-tabs a:hover,.ds-tabs a:focus-visible{color:var(--edh-text, #e6e9ee);}.ds-tabs .ds-active{background:var(--edh-surface-2, #232b37);color:var(--edh-text, #e6e9ee);}"
+    },
+    {
+      "name": "Step Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Panel Slate setup panel with a Signal Blue step number.",
+      "html": "<section class=\"ds-card\"><header><b>1</b><h3>Dataset</h3></header><p>Select the dataset and variables.</p></section>",
+      "css": ".ds-card{background:var(--edh-surface, #1a2029);border-radius:var(--edh-r, 6px);padding:20px 24px;color:#fff;font-family:Roboto, system-ui, sans-serif;}.ds-card header{display:flex;gap:12px;align-items:baseline;}.ds-card b{min-width:1.4rem;color:var(--edh-accent, #4c8dff);font-size:1.1rem;font-weight:500;}.ds-card h3{margin:0;font-size:1.1rem;font-weight:500;}.ds-card p{margin:12px 0 0;font-size:14px;color:var(--edh-muted, #98a2b0);}"
+    },
+    {
+      "name": "Readout Tile",
+      "kind": "custom",
+      "refersTo": "readout-tile",
+      "description": "Label, value, and whether the figure is measured or estimated.",
+      "html": "<div class=\"ds-readout\"><span>Download</span><strong>≈ 42 GB</strong><small>estimate · whole source chunks</small></div>",
+      "css": ".ds-readout{display:inline-flex;flex-direction:column;background:var(--edh-surface-2, #232b37);border-radius:var(--edh-r, 6px);padding:10px 14px;font-family:Roboto, system-ui, sans-serif;color:#fff;}.ds-readout span{font-size:.8rem;color:var(--edh-muted, #98a2b0);}.ds-readout strong{font-size:1.3rem;font-weight:500;line-height:1.3;}.ds-readout small{font-size:12px;line-height:20px;color:var(--edh-muted, #98a2b0);}"
+    },
+    {
+      "name": "Option Card",
+      "kind": "card",
+      "refersTo": "option-card",
+      "description": "A whole-card choice, used to compare chunk layouts.",
+      "html": "<button class=\"ds-opt\"><b>Time Series</b><small>Point data over long periods</small></button><button class=\"ds-opt ds-sel\" aria-pressed=\"true\"><b>Automatic</b><small>General-purpose</small></button>",
+      "css": ".ds-opt{display:inline-flex;flex-direction:column;gap:6px;text-align:left;background:var(--edh-surface-2, #232b37);border:0;border-radius:var(--edh-r, 6px);padding:14px 16px;margin:4px;color:#fff;font-family:Roboto, system-ui, sans-serif;font-size:14px;cursor:pointer;}.ds-opt small{font-size:12px;color:var(--edh-muted, #98a2b0);}.ds-opt:hover,.ds-opt:focus-visible{background:var(--edh-selected, #26406b);}.ds-opt.ds-sel{background:var(--edh-selected, #26406b);outline:2px solid var(--edh-accent, #4c8dff);}"
+    },
+    {
+      "name": "Machine Text",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Roboto Mono for job IDs and output paths.",
+      "html": "<code class=\"ds-mono\">~/edh-data/dataset.zarr</code>",
+      "css": ".ds-mono{font-family:'Roboto Mono', monospace;font-size:12px;color:var(--edh-muted, #98a2b0);}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Instrument Panel",
+    "overview": "Weather Dataset Downloader looks like a quiet dark panel of labelled controls and readouts. Nothing on it is decoration: every element either sets a value or reports one. A researcher configures one consequential job here and later glances back to see how it is doing, so the surface stays calm, exact and unshowy, and trust comes from precision and legibility rather than from visual effect.\n\nThe panel is built from three tonal steps of slate, one lit colour and solid fills. Signal Blue marks where action or selection is. Green, amber and red appear only when they are reporting a state. Numbers are the most prominent content on screen wherever a decision or a check-in depends on them.\n\nDensity is moderate and form-like: a numbered sequence of setup panels beside a sticky summary of what the job will cost. Glows and decorative gradients are refused, as is consumer SaaS gloss.",
+    "keyCharacteristics": [
+      "Flat, solid surfaces separated by tone, with no shadows and no borders on panels.",
+      "One accent colour; status colours carry state only.",
+      "Small, consistent radii (3px to 6px) and matter-of-fact controls.",
+      "Roboto throughout, with Roboto Mono for machine text.",
+      "Dark only."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "There is one accent. Signal Blue means action or selection; a second hue is never introduced for emphasis.",
+        "section": "colors"
+      },
+      {
+        "name": "The State Only Rule",
+        "body": "Green, amber and red report the state of a job, a key or a plan. They are not decoration and are not used for variety.",
+        "section": "colors"
+      },
+      {
+        "name": "The Data Encoding Rule",
+        "body": "The magenta-to-violet gradient exists only inside dataset structure diagrams, where it marks the selected chunk. It never appears on chrome.",
+        "section": "colors"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Buttons and tabs are sentence case with no added tracking. Uppercase labels are not part of this system.",
+        "section": "typography"
+      },
+      {
+        "name": "The Machine Text Rule",
+        "body": "Paths, job IDs, chunk shapes, and logs are set in Roboto Mono. Human-written interface text never is.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tonal Step Rule",
+        "body": "Every level of nesting is one step of slate. If something needs to stand apart, it moves up a tone; it does not gain a shadow, a glow or a border.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use `--edh-*` variables and the constants in `theme.py` for every colour.",
+      "**Do** express nesting by moving one step along Deep Housing, Panel Slate and Inset Slate.",
+      "**Do** keep Signal Blue as the only accent, and reserve one solid primary button for the main action in a view.",
+      "**Do** label figures as measured or estimated in the readout caption.",
+      "**Do** set paths, job IDs and chunk shapes in Roboto Mono.",
+      "**Do** use sentence case on buttons and tabs."
+    ],
+    "donts": [
+      "**Don't** add glows or decorative gradients; the only gradient belongs to the selected chunk in dataset structure diagrams.",
+      "**Don't** add consumer SaaS gloss, such as marketing-style polish, oversized heroes or friendly illustration, inside the tool.",
+      "**Don't** add shadows or borders to panels.",
+      "**Don't** use green, amber or red for anything other than state.",
+      "**Don't** copy the missing-API-key banner's amber tint, 12px radius or shadow into new work."
+    ]
+  }
+}

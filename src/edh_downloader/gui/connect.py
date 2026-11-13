@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse
 from nicegui import Client, app, ui
 
 from .. import __version__, backend, remote, sshconfig, update
-from . import tour
+from . import logo, tour
 from .theme import apply_theme
 
 # one user, one app: the open connections outlive page reloads
@@ -79,8 +79,7 @@ def build_connect_page():
             tip="connect to a server, or use this computer")
 
     with ui.element("div").classes("edh-remote-bar"):
-        ui.html('<div class="edh-logo edh-logo-sm"><span class="material-icons">public</span></div>',
-                sanitize=False)
+        ui.html(logo.img(small=True), sanitize=False)
         with ui.row().classes("edh-ctabs gap-1 no-wrap items-center"):
             tabs()
         ui.space()
@@ -167,7 +166,7 @@ def build_connect_page():
                 el.set_visibility(False)
             with form_pane.clear():
                 with ui.column().classes("w-full items-center gap-2 py-16"):
-                    ui.label("EDH Downloader is closed").classes("edh-title")
+                    ui.label("Weather Dataset Downloader is closed").classes("edh-title")
                     ui.label("You can close this tab. Download jobs keep running.").classes("edh-muted")
             form_pane.set_visibility(True)
             await asyncio.sleep(0.3)
@@ -175,7 +174,7 @@ def build_connect_page():
 
         n = len(sessions)
         conns = f"its {n} SSH connection{'s' if n != 1 else ''}" if n else "the app"
-        confirm("Quit EDH Downloader?", f"Closes {conns}. Download jobs keep running in the background (here and on "
+        confirm("Quit Weather Dataset Downloader?", f"Closes {conns}. Download jobs keep running in the background (here and on "
                 "the servers) and show up again in Jobs when you open the app.", "Quit", quit_)
 
     def watch():  # a connection that dropped (network, server reboot): close its tab and say so
@@ -186,7 +185,7 @@ def build_connect_page():
                 asyncio.create_task(close(sid))
         if update.UPDATED and not STATE.get("update_told"):  # downloaded in the background since the start
             STATE["update_told"] = True
-            ui.notify(f"EDH Downloader {update.UPDATED} is downloaded. It starts next time you open the app; "
+            ui.notify(f"Weather Dataset Downloader {update.UPDATED} is downloaded. It starts next time you open the app; "
                       "download jobs are not affected.", type="info", timeout=0, close_button=True)
 
     ui.timer(2.0, watch)
@@ -259,9 +258,9 @@ def _connect_form(on_connected, open_local):
 
     with ui.column().classes("w-full max-w-[1100px] mx-auto gap-5 px-4 py-8"):
         with ui.row().classes("items-center gap-3 no-wrap"):
-            ui.html('<div class="edh-logo"><span class="material-icons">public</span></div>', sanitize=False)
+            ui.html(logo.img(), sanitize=False)
             with ui.column().classes("gap-0"):
-                ui.label("EDH Downloader").classes("edh-brand")
+                ui.label("Weather Dataset Downloader").classes("edh-brand")
                 ui.label(f"v{__version__} · connect to the server that downloads and stores your data").classes(
                     "edh-muted text-caption")
         with ui.row().classes("w-full gap-5 items-start no-wrap max-md:flex-wrap"):
@@ -466,9 +465,9 @@ def serve_local(port: int = 0, open_browser: bool = True):
     app.on_shutdown(close)
     app.on_startup(lambda: threading.Thread(target=_warm_up, name="edh-dl-warm-up", daemon=True).start())
     path = f"/?token={tok}"
-    print("EDH Downloader (connects to a server over SSH)")
+    print("Weather Dataset Downloader (connects to a server over SSH)")
     print(f"  http://localhost:{port}{path}")
     print("  Closing the browser tab (or Ctrl+C) quits; download jobs keep running.", flush=True)
-    ui.run(host="127.0.0.1", port=port, title="EDH Downloader", show=path if open_browser else False, reload=False,
-           favicon="🌍", dark=True, show_welcome_message=False, storage_secret=secrets.token_hex(16),
+    ui.run(host="127.0.0.1", port=port, title="Weather Dataset Downloader", show=path if open_browser else False, reload=False,
+           favicon=logo.PNG_DATA_URL, dark=True, show_welcome_message=False, storage_secret=secrets.token_hex(16),
            uvicorn_logging_level="warning")

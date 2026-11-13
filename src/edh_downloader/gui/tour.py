@@ -152,7 +152,7 @@ def welcome(on_start: Callable[[], None], on_skip: Callable[[], None], connect: 
     route = ROUTE if connect else ROUTE[1:]
     with ui.dialog().props("persistent") as dlg, ui.card().classes("edh-card gap-4").style(
             "width:min(520px,94vw)").props('role=dialog aria-labelledby=edh-welcome-title'):
-        ui.label("Welcome to EDH Downloader").classes("edh-title").props("id=edh-welcome-title")
+        ui.label("Welcome to Weather Dataset Downloader").classes("edh-title").props("id=edh-welcome-title")
         ui.label("A short tour walks you through a whole download, one step at a time. About two minutes."
                  ).classes("text-body2")
         with ui.element("ol").classes("edh-tour-route"):
