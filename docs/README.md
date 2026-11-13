@@ -1,4 +1,4 @@
-# How Weather Dataset Downloader works
+# How WeatherFetch works
 
 These pages explain what happens between "I want these variables over this area and period" and a finished
 Zarr store: the pieces of the app, the two download pipelines, and the choices behind them. They are written for

@@ -2,11 +2,11 @@
 
 <img src="docs/logo.svg" alt="A man sitting on the Earth squeezes the sun; its juice falls as pixels into a glass jar that fills up as a heatmap" width="200">
 
-# Weather Dataset Downloader
+# WeatherFetch
 
 ### Squeeze the weather out of the sky, straight into a dataset.
 
-A resumable downloader for weather and climate datasets from **Earth Data Hub** and the **Copernicus Climate Data Store**. Pick the variables, the period, the area and the grid; get an analysis-ready **Icechunk** or **Zarr v3** store, through a web interface or the command line.
+**WeatherFetch** is a resumable downloader for weather and climate datasets from **Earth Data Hub** and the **Copernicus Climate Data Store**. Pick the variables, the period, the area and the grid; get an analysis-ready **Icechunk** or **Zarr v3** store, through a web interface or the command line.
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Zarr](https://img.shields.io/badge/Zarr-v3-orange)](https://zarr.dev/)
@@ -23,7 +23,7 @@ A resumable downloader for weather and climate datasets from **Earth Data Hub** 
 
 ## Overview
 
-**Weather Dataset Downloader** turns "I need these variables, over this region and period, at this resolution" into an analysis-ready dataset on your disk or your server, without pulling whole archives and without wasting your API allowance or your place in a queue.
+**WeatherFetch** turns "I need these variables, over this region and period, at this resolution" into an analysis-ready dataset on your disk or your server, without pulling whole archives and without wasting your API allowance or your place in a queue.
 
 It provides an interactive web interface, a command-line interface and a remote execution workflow over SSH.
 
@@ -35,7 +35,7 @@ Downloads run as independent background jobs. They can be interrupted, resumed o
 
 Getting weather data for an analysis is rarely just "downloading a file". Each provider has its own API, its own limits and its own formats: Earth Data Hub counts every chunk against a monthly quota, the Climate Data Store queues every request and slows down clients that send too many. On top of that you need the right variables, a spatial subset, a time resolution, and a layout that is fast to read in Xarray.
 
-Weather Dataset Downloader handles the provider side (requests, quotas, queues, retries, resuming) so you only describe the data you want.
+WeatherFetch handles the provider side (requests, quotas, queues, retries, resuming) so you only describe the data you want.
 
 ## Data sources
 
@@ -119,7 +119,7 @@ Every completed unit is committed to Icechunk, providing a reliable checkpoint f
 
 ### 🧊 Modern scientific storage
 
-Weather Dataset Downloader uses [Icechunk](https://icechunk.io/) as its transactional storage layer and supports exporting datasets to standard [Zarr v3](https://zarr.dev/) stores.
+WeatherFetch uses [Icechunk](https://icechunk.io/) as its transactional storage layer and supports exporting datasets to standard [Zarr v3](https://zarr.dev/) stores.
 
 Features include:
 
@@ -150,7 +150,7 @@ The interface runs locally on your computer, while computation, API keys, downlo
 
 ### 🖥️ Cross-platform standalone application
 
-Weather Dataset Downloader can be distributed as a standalone executable.
+WeatherFetch can be distributed as a standalone executable.
 
 Pre-built releases are provided through GitHub Releases for:
 
@@ -313,7 +313,7 @@ Jobs remain available when you reconnect to the application.
 
 ## Remote Execution
 
-Weather Dataset Downloader supports two approaches to remote execution.
+WeatherFetch supports two approaches to remote execution.
 
 ### A. Using the desktop application
 
@@ -546,7 +546,7 @@ packaging/build.sh
 
 ## Output Formats
 
-Weather Dataset Downloader supports two complementary storage formats, whatever the source.
+WeatherFetch supports two complementary storage formats, whatever the source.
 
 ### Icechunk
 
@@ -681,7 +681,7 @@ Additional options include compression levels, shuffle filters, optional shardin
 
 The [documentation](docs/README.md) explains every part in detail, with diagrams: the [architecture](docs/architecture.md), [jobs](docs/jobs.md), the [Earth Data Hub](docs/earth-data-hub.md) and [Climate Data Store](docs/climate-data-store.md) pipelines, [storage](docs/storage.md), [remote use](docs/remote.md), [keys and quota](docs/keys-and-quota.md) and [releases](docs/releases.md).
 
-Weather Dataset Downloader is organized around a modular download and processing pipeline. Each source plugs in its own catalogue, planner and engine; everything from decoding onwards is shared.
+WeatherFetch is organized around a modular download and processing pipeline. Each source plugs in its own catalogue, planner and engine; everything from decoding onwards is shared.
 
 ```text
                   ┌──────────────────────┐
@@ -801,7 +801,7 @@ This prevents the application from performing uncached metadata requests, making
 
 ## Credits and Acknowledgements
 
-Weather Dataset Downloader builds upon the open scientific data ecosystem and the infrastructure provided by:
+WeatherFetch builds upon the open scientific data ecosystem and the infrastructure provided by:
 
 - **[Earth Data Hub](https://earthdatahub.destine.eu/)** — data access, catalogue services and underlying meteorological datasets.
 - **[Copernicus Climate Data Store](https://cds.climate.copernicus.eu/)** — catalogue and retrieve services for the Copernicus climate datasets.
@@ -825,7 +825,7 @@ See [LICENSE](LICENSE) for the full license text.
 
 **Squeeze the sun. Keep the data.**
 
-If you find Weather Dataset Downloader useful, consider giving the project a ⭐ on GitHub.
+If you find WeatherFetch useful, consider giving the project a ⭐ on GitHub.
 
 [Repository](https://github.com/MaatVO/WeatherFetch) · [Issues](https://github.com/MaatVO/WeatherFetch/issues) · [Releases](https://github.com/MaatVO/WeatherFetch/releases)
 
