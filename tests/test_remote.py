@@ -61,7 +61,32 @@ def test_existing_server_keeps_its_environment(monkeypatch):
     from edh_downloader import remote
 
     legacy = "/home/u/.local/share/edh-dl/venv/bin/python"
+    monkeypatch.setattr(remote, "OPTIONAL_DEPS", [])  # the same packages as before: nothing to install
     assert asyncio.run(remote._python(_FakeConn({legacy}), "/home/u/.local/share/edh-dl")) == legacy
+
+
+def test_grib_support_gets_a_new_environment_and_may_fail(monkeypatch):
+    """Adding the optional GRIB packages builds a new environment once; their failure does not stop the setup."""
+    import asyncio
+
+    from edh_downloader import remote
+
+    legacy = "/home/u/.local/share/edh-dl/venv/bin/python"
+    conn = _FakeConn({legacy})
+    assert asyncio.run(remote._python(conn, "/home/u/.local/share/edh-dl")) is None
+    orig = conn.create_process
+
+    async def optional_fails(cmd, term_type=None):
+        p = await orig(cmd, term_type)
+        if "eccodes" in cmd:
+            p.returncode = 1
+        return p
+
+    conn.create_process = optional_fails
+    said = []
+    asyncio.run(remote.setup(conn, log=said.append))
+    assert any("eccodes" in c for c in conn.cmds)
+    assert any("GRIB support could not be installed" in m for m in said)
 
 
 def test_new_dependencies_install_beside_the_running_environment(monkeypatch):

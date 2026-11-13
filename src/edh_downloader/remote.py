@@ -24,10 +24,13 @@ from .util import read_json, write_json_atomic
 STATE_DIR = "~/.local/share/edh-dl"  # on the server: venv-<deps id>/ and agent/<build>.zip
 DEPS = ["aiohttp>=3.9", "icechunk>=2", "numcodecs>=0.15", "numpy>=2", "pandas>=2.2", "xarray>=2024.10", "zarr>=3"]
 PROBE = "import aiohttp, icechunk, numcodecs, numpy, pandas, xarray, zarr"
+# GRIB decoding for Climate Data Store jobs. Optional: its binary wheels need glibc 2.28+ (macOS 15+), and a server
+# without it must still run Earth Data Hub jobs, so it is installed when possible and never part of the PROBE.
+OPTIONAL_DEPS = ["eccodes>=2.40", "eccodeslib>=2.50.0.34; sys_platform != 'win32'"]
 # Jobs keep running with the code (agent/<build>.zip) and the environment that started them. So nothing a newer app
 # version installs may touch them: each build has its own zip, each dependency set its own venv, and an existing
 # environment is never rebuilt in place (``--clear`` would pull the packages from under a running download).
-DEPS_ID = hashlib.sha256("\n".join(DEPS).encode()).hexdigest()[:10]
+DEPS_ID = hashlib.sha256("\n".join(DEPS + OPTIONAL_DEPS).encode()).hexdigest()[:10]
 LEGACY_DEPS = [  # the set apps before versioned environments installed in venv/
     "aiohttp>=3.9", "icechunk>=2", "numcodecs>=0.15", "numpy>=2", "pandas>=2.2", "xarray>=2024.10",
                "zarr>=3"]
@@ -219,6 +222,14 @@ async def setup(conn, log=lambda m: None) -> None:
         rc, out = await _run(conn, step, log)
         if rc:
             raise SetupFailed(f"setup failed on the server:\n{out[-1500:]}")
+    opt = " ".join(shlex.quote(d) for d in OPTIONAL_DEPS)
+    step = (f"uv pip install --python {shlex.quote(venv)}/bin/python {opt}" if steps[0].startswith("uv ") else
+            f"{shlex.quote(venv)}/bin/python -m pip install --quiet {opt}")
+    log("adding GRIB support (Climate Data Store) …")
+    rc, out = await _run(conn, step, log)
+    if rc:
+        log("GRIB support could not be installed on this server: Climate Data Store jobs that convert GRIB will "
+            "not run here (Earth Data Hub jobs are not affected)")
     if not await _env_ok(conn, f"{venv}/bin/python"):
         raise SetupFailed("the packages were installed but cannot be imported on the server")
 
@@ -230,7 +241,7 @@ async def _python(conn, state: str) -> str | None:
     if await _env_ok(conn, py):
         return py
     legacy = f"{state}/venv/bin/python"
-    if DEPS == LEGACY_DEPS and await _env_ok(conn, legacy):
+    if DEPS == LEGACY_DEPS and not OPTIONAL_DEPS and await _env_ok(conn, legacy):
         return legacy
     return None
 
