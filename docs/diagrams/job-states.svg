@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 450" width="960" height="450" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Job states">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="448" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Job states</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">The worker writes state.json; the UI and the CLI read it, and ask for changes through control.json.</text>
+<rect x="40" y="112" width="150" height="44" rx="22.0" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="115.0" y="139.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">created</text>
+<rect x="230" y="112" width="150" height="44" rx="22.0" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="305.0" y="139.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">starting</text>
+<rect x="420" y="112" width="150" height="44" rx="22.0" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="495.0" y="139.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">running</text>
+<rect x="610" y="112" width="150" height="44" rx="22.0" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="685.0" y="139.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">exporting</text>
+<rect x="800" y="112" width="150" height="44" rx="22.0" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="875.0" y="139.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">completed</text>
+<path d="M190 134 L226 134" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<path d="M380 134 L416 134" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<path d="M570 134 L606 134" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<path d="M760 134 L796 134" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="230" y="200" width="150" height="40" rx="20.0" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="305.0" y="225.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">waiting_quota</text>
+<path d="M440 156 L380 210" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<path d="M380 230 L452 158" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<text x="232" y="258" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">EDH: monthly limit reached,</text>
+<text x="232" y="273" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">waits for the reset</text>
+<path d="M495 156 L495 300" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M115 300 L855 300" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M120 300 L120 318" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="40" y="320" width="160" height="42" rx="21.0" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="120.0" y="346.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">paused</text>
+<text x="120" y="380" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="middle">Pause, or Ctrl+C</text>
+<path d="M300 300 L300 318" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="220" y="320" width="160" height="42" rx="21.0" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="300.0" y="346.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">paused_quota</text>
+<text x="300" y="380" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="middle">quota limit, no waiting</text>
+<path d="M480 300 L480 318" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="400" y="320" width="160" height="42" rx="21.0" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="480.0" y="346.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">cancelled</text>
+<text x="480" y="380" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="middle">Cancel</text>
+<path d="M660 300 L660 318" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="580" y="320" width="160" height="42" rx="21.0" fill="#FDECEE" stroke="#D9363E" stroke-width="2"/>
+<text x="660.0" y="346.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">failed</text>
+<text x="660" y="380" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="middle">an error (see the log)</text>
+<path d="M840 300 L840 318" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="760" y="320" width="160" height="42" rx="21.0" fill="#FDECEE" stroke="#D9363E" stroke-width="2"/>
+<text x="840.0" y="346.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">interrupted</text>
+<text x="840" y="380" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="middle">the worker died</text>
+<path d="M115 386 L115 408" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<path d="M300 386 L300 408" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<path d="M660 386 L660 408" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<path d="M840 386 L840 408" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<path d="M840 408 L18 408 L18 92 L305 92 L305 108" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-ui)"/>
+<rect x="54.2" y="81.0" width="211.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="160" y="94" font-size="12" font-weight="600" fill="#3B7BF0" text-anchor="middle">Resume: a new worker continues</text>
+</svg>

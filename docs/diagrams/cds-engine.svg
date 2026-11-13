@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" width="960" height="610" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Climate Data Store engine">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="608" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Climate Data Store engine</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Few big requests, recorded before they are sent, downloaded as soon as they are ready.</text>
+<rect x="30" y="86" width="280" height="104" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="170.0" y="125.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">1 · Plan (free)</text>
+<text x="170.0" y="146.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">months and years packed under the</text>
+<text x="170.0" y="164.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">cost limit; costing, constraints, licences</text>
+<path d="M310 138 L336 138" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="340" y="86" width="260" height="104" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="470.0" y="125.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">2 · Ledger</text>
+<text x="470.0" y="146.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">requests.json: every request</text>
+<text x="470.0" y="164.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">and its state, saved first</text>
+<path d="M600 138 L626 138" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="630" y="86" width="300" height="104" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="780.0" y="125.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">3 · Queue</text>
+<text x="780.0" y="146.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">at most max_inflight on the CDS;</text>
+<text x="780.0" y="164.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">halves when throttled, grows back</text>
+<path d="M780 190 L780 232" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="794.8" y="203.0" width="50.3" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="820" y="216" font-size="12" font-weight="600" fill="#0E8E9A" text-anchor="middle">submit</text>
+<rect x="630" y="236" width="300" height="104" rx="12" fill="#EEF1F6" stroke="#44546A" stroke-width="2"/>
+<text x="780.0" y="275.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Climate Data Store</text>
+<text x="780.0" y="296.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">accepted, running, successful:</text>
+<text x="780.0" y="314.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">seconds to hours per request</text>
+<path d="M630 288 L604 288" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="340" y="236" width="260" height="104" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="470.0" y="275.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">4 · Poll</text>
+<text x="470.0" y="296.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one job-list call for all requests,</text>
+<text x="470.0" y="314.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">every 5 s, up to 120 s when quiet</text>
+<path d="M340 288 L314 288" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="30" y="236" width="280" height="104" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="170.0" y="275.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">5 · Download</text>
+<text x="170.0" y="296.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">2 at a time, resumable, checksum;</text>
+<text x="170.0" y="314.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">expired result: ask again</text>
+<path d="M170 340 L170 382" fill="none" stroke="#7A8696" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-file)"/>
+<rect x="30" y="386" width="280" height="92" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="170.0" y="428.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Spool</text>
+<text x="170.0" y="449.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">result files, up to max_spool_gb</text>
+<path d="M310 432 L336 432" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="340" y="386" width="260" height="92" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="470.0" y="419.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">6 · Processor</text>
+<text x="470.0" y="440.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">GRIB: message by message</text>
+<text x="470.0" y="458.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">NetCDF: slabs of time steps</text>
+<path d="M600 432 L626 432" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="630" y="386" width="300" height="92" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="780.0" y="419.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">7 · Icechunk, then Zarr</text>
+<text x="780.0" y="440.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one commit per unit, files freed;</text>
+<text x="780.0" y="458.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">export with your layout at the end</text>
+<path d="M470 478 L470 516" fill="none" stroke="#D9363E" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-warn)"/>
+<rect x="340" y="518" width="590" height="64" rx="12" fill="#FDECEE" stroke="#D9363E" stroke-width="2"/>
+<text x="635.0" y="546.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">Not a grid? (station tables, time series, mixed products)</text>
+<text x="635.0" y="567.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">kept as delivered in &lt;name&gt;.files/ with a manifest.json</text>
+</svg>

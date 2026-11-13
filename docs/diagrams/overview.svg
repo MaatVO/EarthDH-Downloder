@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 570" width="960" height="570" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="How a download works">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="568" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">How a download works</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">One job model for both sources; everything after the download is shared.</text>
+<rect x="40" y="84" width="260" height="80" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="170.0" y="111.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">You: web UI or CLI</text>
+<text x="170.0" y="132.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">source, dataset, variables, levels</text>
+<text x="170.0" y="150.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">time, area, grid, storage</text>
+<path d="M300 124 L346 124" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="350" y="84" width="230" height="80" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="465.0" y="111.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">job.json</text>
+<text x="465.0" y="132.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">the whole selection</text>
+<text x="465.0" y="150.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">names the key, never holds it</text>
+<path d="M580 124 L626 124" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="630" y="84" width="290" height="80" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="775.0" y="111.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Plan and cost first</text>
+<text x="775.0" y="132.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">requests, sizes, quota, licences</text>
+<text x="775.0" y="150.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">nothing is downloaded yet</text>
+<path d="M775 164 L775 184 L255 184 L255 210" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<path d="M775 184 L705 184 L705 210" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="374.7" y="169.0" width="90.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="420" y="182" font-size="12" font-weight="600" fill="#E8780C" text-anchor="middle">source = edh</text>
+<rect x="814.7" y="189.0" width="90.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="860" y="202" font-size="12" font-weight="600" fill="#0E8E9A" text-anchor="middle">source = cds</text>
+<rect x="40" y="210" width="430" height="160" rx="16" fill="#FFF1E3" fill-opacity="0.45" stroke="#E8780C" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="56" y="234" font-size="13.5" font-weight="700" fill="#E8780C" text-anchor="start">Earth Data Hub</text>
+<rect x="60" y="248" width="185" height="102" rx="12" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="152.5" y="286.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Planner</text>
+<text x="152.5" y="307.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">every source chunk</text>
+<text x="152.5" y="325.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">the selection touches</text>
+<path d="M245 299 L263 299" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<rect x="265" y="248" width="185" height="102" rx="12" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="357.5" y="286.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Engine</text>
+<text x="357.5" y="307.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">N parallel HTTP reads</text>
+<text x="357.5" y="325.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">of Zarr chunks</text>
+<rect x="490" y="210" width="430" height="160" rx="16" fill="#E0F5F7" fill-opacity="0.45" stroke="#0E8E9A" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="506" y="234" font-size="13.5" font-weight="700" fill="#0E8E9A" text-anchor="start">Climate Data Store</text>
+<rect x="510" y="248" width="185" height="102" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="602.5" y="286.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Planner</text>
+<text x="602.5" y="307.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">fewest requests under</text>
+<text x="602.5" y="325.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">the cost limit</text>
+<path d="M695 299 L713 299" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="715" y="248" width="185" height="102" rx="12" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="807.5" y="286.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Engine</text>
+<text x="807.5" y="307.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">request ledger and</text>
+<text x="807.5" y="325.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">adaptive queue</text>
+<path d="M255 370 L255 392 L180 392" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M705 370 L705 392 L180 392 L180 416" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<rect x="40" y="418" width="280" height="100" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="180.0" y="455.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Processor (shared)</text>
+<text x="180.0" y="476.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">decode Zarr chunks, GRIB, NetCDF</text>
+<text x="180.0" y="494.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">cut area, aggregate time, encode</text>
+<path d="M320 468 L346 468" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="350" y="418" width="260" height="100" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="480.0" y="455.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Icechunk repository</text>
+<text x="480.0" y="476.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one commit per unit</text>
+<text x="480.0" y="494.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">a stopped job resumes here</text>
+<path d="M610 468 L636 468" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="640" y="418" width="280" height="100" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="780.0" y="455.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Zarr v3 export</text>
+<text x="780.0" y="476.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">your chunk layout, codec, shards</text>
+<text x="780.0" y="494.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">then xr.open_zarr(...)</text>
+<text x="40" y="550" font-size="13" font-weight="400" fill="#5B6675" text-anchor="start" font-style="italic">Downloads run as detached jobs: close the browser or the SSH session and the job keeps going.</text>
+</svg>

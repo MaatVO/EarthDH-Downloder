@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Life of one CDS request">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="428" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Life of one CDS request</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Each change is saved to requests.json before the next step: a request is never sent twice.</text>
+<rect x="20" y="140" width="120" height="44" rx="22.0" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="80.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">planned</text>
+<rect x="180" y="140" width="120" height="44" rx="22.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="240.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">submitting</text>
+<rect x="340" y="140" width="120" height="44" rx="22.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="400.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">queued</text>
+<rect x="500" y="140" width="120" height="44" rx="22.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="560.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">ready</text>
+<rect x="660" y="140" width="120" height="44" rx="22.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="720.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">downloaded</text>
+<rect x="820" y="140" width="120" height="44" rx="22.0" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="880.0" y="167.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">done</text>
+<path d="M140 162 L176 162" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<path d="M300 162 L336 162" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<path d="M460 162 L496 162" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<path d="M620 162 L656 162" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<path d="M780 162 L816 162" fill="none" stroke="#0E8E9A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-cds)"/>
+<path d="M240 140 L240 108 L400 108 L400 136" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-ui)"/>
+<rect x="147.0" y="89.0" width="346.0" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="320" y="102" font-size="12" font-weight="600" fill="#3B7BF0" text-anchor="middle">crash after the POST: found on the CDS, not resent</text>
+<path d="M400 184 L400 224 L80 224 L80 188" fill="none" stroke="#D9363E" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-warn)"/>
+<rect x="93.9" y="209.0" width="292.2" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="240" y="222" font-size="12" font-weight="600" fill="#D9363E" text-anchor="middle">throttled, gone, or failed (under 3 tries)</text>
+<path d="M560 184 L560 262 L80 262 L80 224" fill="none" stroke="#D9363E" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5"/>
+<rect x="418.0" y="247.0" width="104.1" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470" y="260" font-size="12" font-weight="600" fill="#D9363E" text-anchor="middle">result expired</text>
+<path d="M420 184 L420 316" fill="none" stroke="#D9363E" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-warn)"/>
+<rect x="360" y="320" width="120" height="40" rx="20.0" fill="#FDECEE" stroke="#D9363E" stroke-width="2"/>
+<text x="420.0" y="345.0" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="middle">failed</text>
+<text x="432" y="304" font-size="12" font-weight="600" fill="#D9363E" text-anchor="start">3rd failure: the job stops</text>
+<text x="20" y="396" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">On resume, queued requests are polled again and downloaded files are reused: the CDS only sees</text>
+<text x="20" y="414" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">a request again when its result is gone, and an identical request is usually served from its cache.</text>
+</svg>

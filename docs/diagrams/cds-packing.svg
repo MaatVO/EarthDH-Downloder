@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Fewest requests: packing">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="498" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Fewest requests: packing</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Illustration: 4 years of ERA5 single levels, 5 variables, hourly, over Europe (limit 121,000 fields).</text>
+<text x="80" y="108" font-size="14.5" font-weight="700" fill="#1F2A37" text-anchor="start">One month per request</text>
+<text x="94.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="122.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">F</text>
+<text x="150.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">M</text>
+<text x="178.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">A</text>
+<text x="206.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">M</text>
+<text x="234.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="262.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="290.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">A</text>
+<text x="318.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">S</text>
+<text x="346.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">O</text>
+<text x="374.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">N</text>
+<text x="402.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">D</text>
+<text x="72" y="159.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2020</text>
+<rect x="82" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="110" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="138" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="166" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="194" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="222" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="250" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="278" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="306" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="334" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="362" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="390" y="142" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<text x="72" y="187.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2021</text>
+<rect x="82" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="110" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="138" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="166" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="194" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="222" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="250" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="278" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="306" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="334" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="362" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="390" y="170" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<text x="72" y="215.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2022</text>
+<rect x="82" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="110" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="138" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="166" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="194" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="222" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="250" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="278" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="306" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="334" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="362" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="390" y="198" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<text x="72" y="243.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2023</text>
+<rect x="82" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="110" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="138" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="166" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="194" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="222" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="250" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="278" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="306" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="334" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="362" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<rect x="390" y="226" width="24" height="24" rx="4" fill="#CFEFF3" stroke="#0E8E9A" stroke-width="1.4"/>
+<text x="80" y="278" font-size="13" font-weight="650" fill="#0E8E9A" text-anchor="start">48 requests, about 3,720 fields each</text>
+<text x="540" y="108" font-size="14.5" font-weight="700" fill="#1F2A37" text-anchor="start">Packed by the planner</text>
+<text x="554.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="582.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">F</text>
+<text x="610.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">M</text>
+<text x="638.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">A</text>
+<text x="666.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">M</text>
+<text x="694.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="722.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">J</text>
+<text x="750.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">A</text>
+<text x="778.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">S</text>
+<text x="806.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">O</text>
+<text x="834.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">N</text>
+<text x="862.0" y="132" font-size="11" font-weight="400" fill="#5B6675" text-anchor="middle">D</text>
+<text x="532" y="159.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2020</text>
+<text x="532" y="187.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2021</text>
+<text x="532" y="215.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2022</text>
+<text x="532" y="243.0" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="end">2023</text>
+<rect x="542" y="142" width="332" height="52" rx="8" fill="#7FD3DC" stroke="#1F2A37" stroke-width="1.6"/>
+<text x="708" y="173" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">request 1: 2020 and 2021</text>
+<rect x="542" y="198" width="332" height="52" rx="8" fill="#F6B26B" stroke="#1F2A37" stroke-width="1.6"/>
+<text x="708" y="229" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">request 2: 2022 and 2023</text>
+<text x="540" y="278" font-size="13" font-weight="650" fill="#0E8E9A" text-anchor="start">2 requests, about 87,700 fields each</text>
+<text x="80" y="330" font-size="13.5" font-weight="650" fill="#1F2A37" text-anchor="start">Request sizes the planner tries, from the biggest to the smallest:</text>
+<rect x="80" y="346" width="120.19999999999999" height="38" rx="19.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="140.1" y="370.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">whole years</text>
+<path d="M204.2 365 L230.2 365" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="234.2" y="346" width="161.2" height="38" rx="19.0" fill="#E0F5F7" stroke="#0E8E9A" stroke-width="2"/>
+<text x="314.79999999999995" y="370.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">months of a year</text>
+<path d="M399.4 365 L425.4 365" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="429.4" y="346" width="103.8" height="38" rx="19.0" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="481.29999999999995" y="370.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">variables</text>
+<path d="M537.1999999999999 365 L563.1999999999999 365" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="567.2" y="346" width="79.19999999999999" height="38" rx="19.0" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="606.8000000000001" y="370.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">levels</text>
+<path d="M650.4000000000001 365 L676.4000000000001 365" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="680.4000000000001" y="346" width="62.8" height="38" rx="19.0" fill="#FDECEE" stroke="#D9363E" stroke-width="2"/>
+<text x="711.8000000000001" y="370.0" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">days</text>
+<text x="80" y="418" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Months only partly selected are asked for whole when that saves a request: a few extra fields cost</text>
+<text x="80" y="436" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">little, a queue slot can cost hours. The area is cut and the grid changed on the CDS side when the</text>
+<text x="80" y="454" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">dataset allows it. Every request is then priced by the CDS costing endpoint (free) before launch.</text>
+</svg>

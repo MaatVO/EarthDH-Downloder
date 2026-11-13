@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Units: how a long period is cut">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="418" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Units: how a long period is cut</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Illustration: 4 output periods per source time chunk, shifted by a UTC offset.</text>
+<text x="80" y="104" font-size="13" font-weight="650" fill="#E8780C" text-anchor="start">Source time chunks (each downloaded once)</text>
+<rect x="80" y="114" width="140" height="40" rx="6" fill="#FFE2C2" stroke="#E8780C" stroke-width="2"/>
+<text x="150.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 0</text>
+<rect x="220" y="114" width="140" height="40" rx="6" fill="#FFD0A0" stroke="#E8780C" stroke-width="2"/>
+<text x="290.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 1</text>
+<rect x="360" y="114" width="140" height="40" rx="6" fill="#FFE2C2" stroke="#E8780C" stroke-width="2"/>
+<text x="430.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 2</text>
+<rect x="500" y="114" width="140" height="40" rx="6" fill="#FFD0A0" stroke="#E8780C" stroke-width="2"/>
+<text x="570.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 3</text>
+<rect x="640" y="114" width="140" height="40" rx="6" fill="#FFE2C2" stroke="#E8780C" stroke-width="2"/>
+<text x="710.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 4</text>
+<rect x="780" y="114" width="140" height="40" rx="6" fill="#FFD0A0" stroke="#E8780C" stroke-width="2"/>
+<text x="850.0" y="139" font-size="13" font-weight="600" fill="#1F2A37" text-anchor="middle">chunk 5</text>
+<text x="80" y="192" font-size="13" font-weight="650" fill="#7B34DB" text-anchor="start">Output periods (days, months, ...)</text>
+<rect x="98" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="133" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="168" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="203" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="238" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="273" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="308" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="343" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="378" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="413" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="448" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="483" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="518" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="553" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="588" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="623" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="658" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="693" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="728" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="763" y="202" width="33" height="30" rx="4" fill="#EADCFF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="798" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="833" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<rect x="868" y="202" width="33" height="30" rx="4" fill="#D8C2FF" stroke="#7B34DB" stroke-width="1.4"/>
+<text x="80" y="270" font-size="13" font-weight="650" fill="#1C9A5A" text-anchor="start">Units: the periods starting inside one source chunk, one Icechunk commit each</text>
+<path d="M99 282 v10 H235 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="167.0" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 0</text>
+<path d="M239 282 v10 H375 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="307.0" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 1</text>
+<path d="M379 282 v10 H515 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="447.0" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 2</text>
+<path d="M519 282 v10 H655 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="587.0" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 3</text>
+<path d="M659 282 v10 H795 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="727.0" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 4</text>
+<path d="M799 282 v10 H900 v-10" fill="none" stroke="#1C9A5A" stroke-width="2.4"/>
+<text x="849.5" y="312" font-size="13" font-weight="650" fill="#1F2A37" text-anchor="middle">unit 5</text>
+<path d="M202 233 L237 233" stroke="#D9363E" stroke-width="4"/>
+<path d="M220 156 V244" stroke="#D9363E" stroke-width="2" stroke-dasharray="4 4"/>
+<rect x="219.0" y="241.5" width="138.8" height="17.5" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="224" y="254" font-size="11.5" font-weight="600" fill="#D9363E" text-anchor="start">crosses into chunk 1</text>
+<text x="80" y="350" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">The last period of unit 0 reaches into chunk 1, so chunk 1 serves units 0 and 1: it stays in the spool</text>
+<text x="80" y="368" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">until the last unit that needs it is committed. Inside a unit, space is processed in groups that fit</text>
+<text x="80" y="386" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">the memory budget. A unit is also the checkpoint: a resumed job starts at the first unit not committed.</text>
+</svg>

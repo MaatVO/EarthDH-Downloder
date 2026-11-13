@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Where things run">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="538" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Where things run</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">The interface runs on your computer; keys, jobs and data stay on the machine that downloads.</text>
+<rect x="30" y="84" width="410" height="410" rx="16" fill="#E8F0FF" fill-opacity="0.45" stroke="#3B7BF0" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="46" y="108" font-size="13.5" font-weight="700" fill="#3B7BF0" text-anchor="start">Your computer</text>
+<rect x="60" y="124" width="350" height="62" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="235.0" y="151.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Browser</text>
+<text x="235.0" y="172.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one tab per connection</text>
+<path d="M235 186 L235 212" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="60" y="214" width="350" height="80" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="235.0" y="241.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">edh-dl app (NiceGUI)</text>
+<text x="235.0" y="262.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">gui/connect.py: servers and tabs</text>
+<text x="235.0" y="280.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">gui/app.py: the job form, keys, jobs</text>
+<path d="M235 294 L235 320" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="60" y="322" width="350" height="80" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="235.0" y="349.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">backend.Local / backend.Remote</text>
+<text x="235.0" y="370.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">await call(method, **kwargs)</text>
+<text x="235.0" y="388.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">same JSON answers either way</text>
+<text x="60" y="440" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">This computer: Local runs service.py</text>
+<text x="60" y="458" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">in the same process, no SSH involved.</text>
+<rect x="520" y="84" width="410" height="410" rx="16" fill="#F1E8FF" fill-opacity="0.45" stroke="#7B34DB" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="536" y="108" font-size="13.5" font-weight="700" fill="#7B34DB" text-anchor="start">Server (or this computer)</text>
+<rect x="550" y="124" width="350" height="80" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="725.0" y="151.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">edh-dl agent</text>
+<text x="725.0" y="172.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">JSON lines on stdin / stdout</text>
+<text x="725.0" y="190.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one thread per request</text>
+<path d="M725 204 L725 230" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="550" y="232" width="350" height="80" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="725.0" y="259.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">service.py</text>
+<text x="725.0" y="280.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">keys, quota, catalogues, plans,</text>
+<text x="725.0" y="298.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">jobs, output stores</text>
+<path d="M640 312 L640 346" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="579.8" y="323.0" width="50.3" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="605" y="336" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">launch</text>
+<path d="M810 312 L810 346" fill="none" stroke="#7A8696" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-file)"/>
+<rect x="550" y="348" width="170" height="110" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="635.0" y="381.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Job workers</text>
+<text x="635.0" y="402.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">detached _worker</text>
+<text x="635.0" y="420.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">processes (setsid),</text>
+<text x="635.0" y="438.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">survive logout</text>
+<path d="M720 403 L728 403" fill="none" stroke="#7A8696" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-file)"/>
+<rect x="730" y="348" width="170" height="110" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="815.0" y="381.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Files</text>
+<text x="815.0" y="402.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">keys.json, usage.json</text>
+<text x="815.0" y="420.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">jobs/&lt;id&gt;/</text>
+<text x="815.0" y="438.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">output stores</text>
+<path d="M410 362 L470 362 L470 164 L546 164" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="418.0" y="257.0" width="104.1" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470" y="270" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">SSH (asyncssh)</text>
+</svg>

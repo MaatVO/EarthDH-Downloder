@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Earth Data Hub engine">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="558" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Earth Data Hub engine</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Async downloads fill a spool a few units ahead; one processor thread commits the units in order.</text>
+<rect x="30" y="84" width="430" height="440" rx="16" fill="#FFF1E3" fill-opacity="0.45" stroke="#E8780C" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="46" y="108" font-size="13.5" font-weight="700" fill="#E8780C" text-anchor="start">asyncio event loop</text>
+<rect x="50" y="120" width="390" height="74" rx="12" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="245.0" y="144.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Producer</text>
+<text x="245.0" y="165.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">queues the chunks of the next units:</text>
+<text x="245.0" y="183.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">at most 2 units ahead, spool and disk limits</text>
+<path d="M245 194 L245 214" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<rect x="50" y="216" width="390" height="46" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="245.0" y="244.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">work queue</text>
+<path d="M245 262 L245 286" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<rect x="50" y="288" width="390" height="88" rx="12" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="245.0" y="319.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Workers</text>
+<text x="245.0" y="340.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">N connections, changeable while running</text>
+<text x="245.0" y="358.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">GET, retry, count the request, write file</text>
+<rect x="50" y="410" width="390" height="88" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="245.0" y="441.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Monitor (every 2 s)</text>
+<text x="245.0" y="462.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">reads control.json: connections, pause</text>
+<text x="245.0" y="480.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">rates, ETA, waits for the quota reset</text>
+<path d="M245 410 L245 380" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ui)"/>
+<rect x="490" y="112" width="150" height="84" rx="12" fill="#EEF1F6" stroke="#44546A" stroke-width="2"/>
+<text x="565.0" y="141.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">Earth Data Hub</text>
+<text x="565.0" y="162.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">Zarr chunks</text>
+<text x="565.0" y="180.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">over HTTPS</text>
+<path d="M440 312 L466 312 L466 154 L486 154" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<rect x="490" y="286" width="150" height="110" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="565.0" y="319.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Spool</text>
+<text x="565.0" y="340.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one file per</text>
+<text x="565.0" y="358.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">source chunk</text>
+<text x="565.0" y="376.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">(.miss = empty)</text>
+<path d="M440 352 L486 352" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<rect x="668" y="84" width="266" height="440" rx="16" fill="#F1E8FF" fill-opacity="0.45" stroke="#7B34DB" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="684" y="108" font-size="13.5" font-weight="700" fill="#7B34DB" text-anchor="start">Processor thread</text>
+<rect x="688" y="120" width="226" height="74" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="801.0" y="144.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Wait</text>
+<text x="801.0" y="165.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">until every chunk of the</text>
+<text x="801.0" y="183.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">next unit is in the spool</text>
+<path d="M640 330 L660 330 L660 157 L684 157" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<path d="M801 194 L801 214" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="688" y="216" width="226" height="88" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="801.0" y="247.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Decode, cut, aggregate</text>
+<text x="801.0" y="268.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">space groups in a thread</text>
+<text x="801.0" y="286.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">pool, within memory_gb</text>
+<path d="M801 304 L801 324" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="688" y="326" width="226" height="70" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="801.0" y="357.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Commit the unit</text>
+<text x="801.0" y="378.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">one Icechunk commit</text>
+<path d="M801 396 L801 416" fill="none" stroke="#7A8696" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-file)"/>
+<rect x="688" y="418" width="226" height="74" rx="12" fill="#F3F5F8" stroke="#7A8696" stroke-width="2"/>
+<text x="801.0" y="442.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Free the spool</text>
+<text x="801.0" y="463.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">chunks no later</text>
+<text x="801.0" y="481.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">unit needs</text>
+<path d="M914 455 L926 455 L926 157 L918 157" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-proc)"/>
+</svg>

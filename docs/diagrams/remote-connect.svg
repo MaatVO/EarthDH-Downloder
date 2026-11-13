@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 590" width="960" height="590" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Connecting to a server">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="588" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Connecting to a server</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">What the app does over one SSH connection (asyncssh: no ssh binary needed).</text>
+<rect x="50" y="80" width="300" height="48" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="200.0" y="109.0" font-size="14.5" font-weight="650" fill="#1F2A37" text-anchor="middle">Your computer: edh-dl app</text>
+<rect x="590" y="80" width="300" height="48" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="740.0" y="109.0" font-size="14.5" font-weight="650" fill="#1F2A37" text-anchor="middle">Server</text>
+<path d="M200 128 V530" stroke="#3B7BF0" stroke-width="2" stroke-dasharray="4 6"/>
+<path d="M740 128 V530" stroke="#7B34DB" stroke-width="2" stroke-dasharray="4 6"/>
+<circle cx="170" cy="168" r="12" fill="#3B7BF0"/>
+<text x="170" y="172.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<path d="M200 168 L736 168" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ui)"/>
+<rect x="273.5" y="149.0" width="393.0" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="162" font-size="12" font-weight="600" fill="#3B7BF0" text-anchor="middle">connect: ~/.ssh/config, ProxyJump, key, agent or password</text>
+<circle cx="170" cy="214" r="12" fill="#3B7BF0"/>
+<text x="170" y="218.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<path d="M200 214 L736 214" fill="none" stroke="#3B7BF0" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ui)"/>
+<rect x="303.7" y="195.0" width="332.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="208" font-size="12" font-weight="600" fill="#3B7BF0" text-anchor="middle">unknown host key? you check the fingerprint once</text>
+<circle cx="170" cy="260" r="12" fill="#7B34DB"/>
+<text x="170" y="264.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+<path d="M200 260 L736 260" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="303.7" y="241.0" width="332.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="254" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">look for venv-&lt;deps id&gt; in ~/.local/share/edh-dl</text>
+<circle cx="170" cy="306" r="12" fill="#7B34DB"/>
+<text x="170" y="310.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<path d="M200 306 L736 306" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="286.9" y="287.0" width="366.2" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="300" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">missing: create it with uv (or python3 -m venv), once</text>
+<circle cx="170" cy="352" r="12" fill="#7B34DB"/>
+<text x="170" y="356.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+<path d="M200 352 L736 352" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="303.7" y="333.0" width="332.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="346" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">upload agent.zip, only when the build id changed</text>
+<circle cx="170" cy="398" r="12" fill="#7B34DB"/>
+<text x="170" y="402.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+<path d="M200 398 L736 398" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="340.7" y="379.0" width="258.6" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="392" font-size="12" font-weight="600" fill="#7B34DB" text-anchor="middle">start: python -m edh_downloader agent</text>
+<circle cx="170" cy="444" r="12" fill="#1C9A5A"/>
+<text x="170" y="448.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
+<path d="M740 444 L204 444" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ok)"/>
+<rect x="360.8" y="425.0" width="218.3" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="438" font-size="12" font-weight="600" fill="#1C9A5A" text-anchor="middle">hello: version and capabilities</text>
+<circle cx="170" cy="490" r="12" fill="#0E8E9A"/>
+<text x="170" y="494.5" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<path d="M204 490 L736 490" stroke="#0E8E9A" stroke-width="2.2" marker-start="url(#a-cds)" marker-end="url(#a-cds)"/>
+<rect x="297.0" y="471.0" width="346.0" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="470.0" y="484" font-size="12" font-weight="600" fill="#0E8E9A" text-anchor="middle">JSON requests and answers: keys, plans, jobs, logs</text>
+<text x="28" y="548" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Closing the tab ends the agent. Download jobs are separate detached processes on the server and keep running.</text>
+<text x="28" y="566" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Without the app: edh-dl launcher sh | ps1 prints a script that opens the same UI through a plain ssh tunnel.</text>
+</svg>

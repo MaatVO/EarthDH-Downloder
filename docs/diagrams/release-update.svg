@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Releases and self-update">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="398" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Releases and self-update</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">From a push on main to the new version on your computer.</text>
+<rect x="30" y="90" width="200" height="86" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="130.0" y="120.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Push to main</text>
+<text x="130.0" y="141.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">version = major.minor</text>
+<text x="130.0" y="159.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">+ CI run number</text>
+<path d="M230 133 L266 133" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="270" y="90" width="330" height="86" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="435.0" y="120.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">CI build (Linux, macOS, Windows)</text>
+<text x="435.0" y="141.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">PyInstaller single file</text>
+<text x="435.0" y="159.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">with a .sha256 next to it</text>
+<path d="M600 133 L636 133" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="640" y="90" width="290" height="86" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="785.0" y="120.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">GitHub release</text>
+<text x="785.0" y="141.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">executables, checksums,</text>
+<text x="785.0" y="159.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">notes from the commits</text>
+<path d="M785 176 L785 206 L115 206 L115 226" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#a-store)"/>
+<rect x="30" y="230" width="200" height="96" rx="12" fill="#E8F0FF" stroke="#3B7BF0" stroke-width="2"/>
+<text x="130.0" y="265.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">edh-dl starts</text>
+<text x="130.0" y="286.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">never delayed:</text>
+<text x="130.0" y="304.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">the check runs alongside</text>
+<path d="M230 278 L256 278" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="260" y="230" width="210" height="96" rx="12" fill="#EEF1F6" stroke="#44546A" stroke-width="2"/>
+<text x="365.0" y="265.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Newer release?</text>
+<text x="365.0" y="286.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">asks GitHub for the</text>
+<text x="365.0" y="304.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">latest one, in background</text>
+<path d="M470 278 L496 278" fill="none" stroke="#44546A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ink)"/>
+<rect x="500" y="230" width="200" height="96" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="600.0" y="265.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Download + verify</text>
+<text x="600.0" y="286.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">SHA-256 must match</text>
+<text x="600.0" y="304.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">else nothing changes</text>
+<path d="M700 278 L726 278" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-ok)"/>
+<rect x="730" y="230" width="200" height="96" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="830.0" y="265.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Swap the executable</text>
+<text x="830.0" y="286.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">the running one goes on;</text>
+<text x="830.0" y="304.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">new version next start</text>
+<text x="30" y="360" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Only the packaged executable updates itself (not source or uv tool installs, not +local builds).</text>
+<text x="30" y="378" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Opt out with --no-update or EDH_DL_NO_UPDATE=1; edh-dl update does it on demand.</text>
+</svg>

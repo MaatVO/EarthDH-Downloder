@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Adaptive queue">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="398" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Adaptive queue</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">How many requests may wait on the CDS at once, over a job's life (setting: 4).</text>
+<path d="M90 320 H920" stroke="#5B6675" stroke-width="1.6"/>
+<path d="M90 320 V90.00000000000003" stroke="#5B6675" stroke-width="1.6"/>
+<text x="78" y="274" font-size="12" font-weight="400" fill="#5B6675" text-anchor="end">1</text>
+<path d="M90 270 H920" stroke="#E4E8EE" stroke-width="1"/>
+<text x="78" y="224" font-size="12" font-weight="400" fill="#5B6675" text-anchor="end">2</text>
+<path d="M90 220 H920" stroke="#E4E8EE" stroke-width="1"/>
+<text x="78" y="174" font-size="12" font-weight="400" fill="#5B6675" text-anchor="end">3</text>
+<path d="M90 170 H920" stroke="#E4E8EE" stroke-width="1"/>
+<text x="78" y="124" font-size="12" font-weight="400" fill="#5B6675" text-anchor="end">4</text>
+<path d="M90 120 H920" stroke="#E4E8EE" stroke-width="1"/>
+<text x="40" y="205.0" font-size="12" font-weight="400" fill="#5B6675" text-anchor="middle">in flight</text>
+<text x="920" y="346" font-size="12" font-weight="400" fill="#5B6675" text-anchor="end">time</text>
+<path d="M90 120 H920" stroke="#3B7BF0" stroke-width="1.4" stroke-dasharray="5 5"/>
+<rect x="808.0" y="99.0" width="83.9" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="850" y="112" font-size="12" font-weight="600" fill="#3B7BF0" text-anchor="middle">job setting</text>
+<rect x="250" y="95.0" width="130" height="225.0" rx="0" fill="#FDECEE" stroke="#FDECEE" stroke-width="0"/>
+<text x="315.0" y="285.0" font-size="11.5" font-weight="600" fill="#D9363E" text-anchor="middle">back off</text>
+<rect x="640" y="95.0" width="80" height="225.0" rx="0" fill="#FDECEE" stroke="#FDECEE" stroke-width="0"/>
+<text x="680.0" y="285.0" font-size="11.5" font-weight="600" fill="#D9363E" text-anchor="middle">back off</text>
+<path d="M90 120 H250 V220 H470 V170 H560 V120 H640 V220 H800 V170 H920 V170" fill="none" stroke="#0E8E9A" stroke-width="3.5" stroke-linejoin="round"/>
+<g stroke="#D9363E" stroke-width="3.5" stroke-linecap="round"><path d="M243 113 l14 14 M257 113 l-14 14"/></g>
+<g stroke="#D9363E" stroke-width="3.5" stroke-linecap="round"><path d="M633 113 l14 14 M647 113 l-14 14"/></g>
+<circle cx="400" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="430" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="460" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="490" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="520" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="550" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="740" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="770" cy="306" r="5" fill="#1C9A5A"/>
+<circle cx="800" cy="306" r="5" fill="#1C9A5A"/>
+<rect x="184.5" y="87.0" width="131.0" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="250" y="100" font-size="12" font-weight="600" fill="#D9363E" text-anchor="middle">CDS refuses: halve</text>
+<rect x="459.6" y="145.0" width="110.8" height="18" rx="4" fill="#FFFFFF" fill-opacity="0.92"/>
+<text x="515" y="158" font-size="12" font-weight="600" fill="#1C9A5A" text-anchor="middle">3 successes: +1</text>
+<text x="400" y="346" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">green dots: requests that went through</text>
+<text x="28" y="376" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Back-off starts at 60 s and doubles up to 30 min. You can change the setting while the job runs (job card, Queue menu).</text>
+</svg>

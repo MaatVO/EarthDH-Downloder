@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Chunk layouts: same data, different reads">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="398" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Chunk layouts: same data, different reads</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Each rectangle is one variable (time across, space down); lines are chunk boundaries.</text>
+<text x="40" y="98" font-size="15" font-weight="700" fill="#1F2A37" text-anchor="start">Time series</text>
+<rect x="40" y="110" width="260" height="170" rx="6" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<rect x="43" y="176.66666666666666" width="254" height="6" rx="3" fill="#EF2B89" stroke="#EF2B89" stroke-width="0"/>
+<path d="M40 138.33333333333334 H300 M40 166.66666666666666 H300 M40 195.0 H300 M40 223.33333333333331 H300 M40 251.66666666666666 H300" stroke="#7B34DB" stroke-width="1.6"/>
+<text x="40" y="302" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">time →</text>
+<text x="300" y="302" font-size="12" font-weight="600" fill="#EF2B89" text-anchor="end">a point over all years: 1 chunk</text>
+<text x="350" y="98" font-size="15" font-weight="700" fill="#1F2A37" text-anchor="start">Maps</text>
+<rect x="350" y="110" width="260" height="170" rx="6" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<rect x="459.5" y="113" width="6" height="164" rx="3" fill="#EF2B89" stroke="#EF2B89" stroke-width="0"/>
+<path d="M382.5 110 V280 M415.0 110 V280 M447.5 110 V280 M480.0 110 V280 M512.5 110 V280 M545.0 110 V280 M577.5 110 V280" stroke="#7B34DB" stroke-width="1.6"/>
+<text x="350" y="302" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">time →</text>
+<text x="610" y="302" font-size="12" font-weight="600" fill="#EF2B89" text-anchor="end">one map at one date: 1 chunk</text>
+<text x="660" y="98" font-size="15" font-weight="700" fill="#1F2A37" text-anchor="start">Automatic</text>
+<rect x="660" y="110" width="260" height="170" rx="6" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<path d="M725.0 110 V280 M790.0 110 V280 M855.0 110 V280 M660 166.66666666666666 H920 M660 223.33333333333331 H920" stroke="#7B34DB" stroke-width="1.6"/>
+<text x="660" y="302" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">time →</text>
+<text x="920" y="302" font-size="12" font-weight="600" fill="#5B6675" text-anchor="end">balanced; download-aligned</text>
+<text x="40" y="340" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">The download costs the same either way. Icechunk always uses the automatic layout, so each chunk is</text>
+<text x="40" y="358" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">written exactly once while units arrive; the export rechunks to the layout you picked. The form shows</text>
+<text x="40" y="376" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">each layout's chunk size, chunk count and the cost of reading a time series or a map.</text>
+</svg>

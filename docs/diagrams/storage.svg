@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" width="960" height="470" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Storage: Icechunk first, Zarr at the end">
+<defs><marker id="a-ui" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3B7BF0"/></marker><marker id="a-edh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#E8780C"/></marker><marker id="a-cds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0E8E9A"/></marker><marker id="a-proc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B34DB"/></marker><marker id="a-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-file" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A8696"/></marker><marker id="a-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker><marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D9363E"/></marker><marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1C9A5A"/></marker><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#44546A"/></marker></defs>
+<rect x="1" y="1" width="958" height="468" rx="18" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+<text x="28" y="40" font-size="21" font-weight="750" fill="#1F2A37">Storage: Icechunk first, Zarr at the end</text>
+<text x="28" y="62" font-size="13.5" fill="#5B6675">Units are committed as they finish; the layout you chose is applied once, in a local pass.</text>
+<text x="40" y="106" font-size="13" font-weight="650" fill="#1C9A5A" text-anchor="start">Committed units</text>
+<rect x="40" y="116" width="24" height="24" rx="5" fill="#BDEBD1" stroke="#1C9A5A" stroke-width="1.6"/>
+<rect x="70" y="116" width="24" height="24" rx="5" fill="#BDEBD1" stroke="#1C9A5A" stroke-width="1.6"/>
+<rect x="100" y="116" width="24" height="24" rx="5" fill="#BDEBD1" stroke="#1C9A5A" stroke-width="1.6"/>
+<rect x="130" y="116" width="24" height="24" rx="5" fill="#BDEBD1" stroke="#1C9A5A" stroke-width="1.6"/>
+<rect x="160" y="116" width="24" height="24" rx="5" fill="#FFFFFF" stroke="#1C9A5A" stroke-width="1.6"/>
+<rect x="190" y="116" width="24" height="24" rx="5" fill="#FFFFFF" stroke="#1C9A5A" stroke-width="1.6"/>
+<text x="40" y="160" font-size="11.5" font-weight="400" fill="#5B6675" text-anchor="start">4 of 6: a resumed job continues at 5</text>
+<path d="M230 128 L266 128" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="270" y="86" width="300" height="120" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="420.0" y="124.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Icechunk repository</text>
+<text x="420.0" y="145.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">&lt;name&gt;.icechunk</text>
+<text x="420.0" y="163.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">staging layout: one download unit</text>
+<text x="420.0" y="181.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">of time per chunk, written once</text>
+<path d="M570 146 L606 146" fill="none" stroke="#7B34DB" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-proc)"/>
+<rect x="610" y="86" width="320" height="120" rx="12" fill="#F1E8FF" stroke="#7B34DB" stroke-width="2"/>
+<text x="770.0" y="124.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Export</text>
+<text x="770.0" y="145.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">after the last unit: a local rechunk,</text>
+<text x="770.0" y="163.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">memory-bounded, aligned to the</text>
+<text x="770.0" y="181.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">destination's chunks or shards</text>
+<path d="M770 206 L770 242" fill="none" stroke="#1C9A5A" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-store)"/>
+<rect x="560" y="246" width="370" height="130" rx="12" fill="#E3F7EC" stroke="#1C9A5A" stroke-width="2"/>
+<text x="745.0" y="280.0" font-size="15" font-weight="650" fill="#1F2A37" text-anchor="middle">Zarr v3 store: &lt;name&gt;.zarr</text>
+<text x="745.0" y="301.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">layout: automatic, time series, maps, custom</text>
+<text x="745.0" y="319.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">codec and level, optional shards</text>
+<text x="745.0" y="337.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">float32 / float64, optional bit-rounding</text>
+<text x="745.0" y="355.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">consolidated metadata, provenance attrs</text>
+<rect x="40" y="246" width="470" height="130" rx="12" fill="#FFF1E3" stroke="#E8780C" stroke-width="2"/>
+<text x="275.0" y="280.0" font-size="14" font-weight="650" fill="#1F2A37" text-anchor="middle">Extend an existing store (Earth Data Hub jobs)</text>
+<text x="275.0" y="301.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">append after (forward) or before (backward) its times</text>
+<text x="275.0" y="319.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">checked first: same variables, area, grid and levels,</text>
+<text x="275.0" y="337.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">no repeated times; the repository is then resized</text>
+<text x="275.0" y="355.0" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="middle">and the new units are committed as usual</text>
+<path d="M320 246 L360 210" fill="none" stroke="#E8780C" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#a-edh)"/>
+<text x="40" y="420" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">keep_icechunk = false: the repository is removed after a successful export (keeps disk use low).</text>
+<text x="40" y="440" font-size="12.5" font-weight="400" fill="#5B6675" text-anchor="start">Only Icechunk: no export; open the repository read-only with icechunk and xarray.</text>
+</svg>
