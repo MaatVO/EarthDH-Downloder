@@ -4,6 +4,7 @@ The GUI only builds this; the engine only reads it. A job file can be created on
 another (``edh-dl run job.json``). It never contains the API key itself, only the key's name.
 """
 
+import shutil
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -95,7 +96,7 @@ class OutputSpec:
 class DownloadSpec:
     key: str | None = None  # API key name; None = default key
     connections: int = 8
-    spool_dir: str | None = None  # temporary raw chunks; None = inside the job folder
+    spool_dir: str | None = None  # temporary raw chunks; None = <output folder>/tmp/<job id>
     max_spool_gb: float = 20.0
     min_free_gb: float = 10.0
     quota_safety: float = 0.9  # stop at this fraction of the monthly quota
@@ -152,6 +153,28 @@ class JobSpec:
     @property
     def output_dir(self) -> Path:
         return Path(self.output.directory).expanduser()
+
+    def spool_path(self, job_id: str, job_dir: Path | None = None) -> Path:
+        """Temporary raw chunks of a job: ``<spool_dir>/<job id>``, by default ``<output folder>/tmp/<job id>``.
+
+        A job started before that default existed has its chunks in ``<job folder>/spool``: it keeps using them
+        (pass ``job_dir``), so resuming it downloads nothing twice."""
+        d = self.download.spool_dir
+        if d:
+            return Path(d).expanduser() / job_id
+        if job_dir is not None and (Path(job_dir) / "spool").is_dir():
+            return Path(job_dir) / "spool"
+        return self.output_dir / "tmp" / job_id
+
+    def remove_spool(self, job_id: str, job_dir: Path | None = None) -> None:
+        """Delete the job's temporary chunks, and the default ``tmp/`` folder once no other job uses it."""
+        shutil.rmtree(self.spool_path(job_id, job_dir), ignore_errors=True)
+        shutil.rmtree(self.spool_path(job_id), ignore_errors=True)
+        if not self.download.spool_dir:
+            try:
+                (self.output_dir / "tmp").rmdir()  # only succeeds when empty
+            except OSError:
+                pass
 
     @property
     def icechunk_path(self) -> Path:

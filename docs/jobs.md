@@ -33,9 +33,14 @@ Each job lives in `<data>/jobs/<id>/` (`~/.local/share/edh-dl/jobs/` by default)
 | `log.txt` | the worker | The job's log (the job card's **Log**, `edh-dl log ID`) |
 | `worker.out` | the worker | Standard output and errors of the process (useful if it dies before logging) |
 | `run.lock`, `launch.lock` | runner | One worker per job, even after two clicks on Resume |
-| `spool/` | the engine | Downloaded chunks or result files waiting to be processed (`download.spool_dir` can move it) |
 | `requests.json` | CDS engine | The request ledger (see [Climate Data Store](climate-data-store.md)) |
 | `output.json`, `grid.npz` | CDS engine | The output layout learned from the first files, so a resumed job writes the same layout |
+
+The temporary files (downloaded chunks or result files waiting to be processed) are not in the job folder: they go
+to `<output folder>/tmp/<job id>/`, on the same disk as the output. `download.spool_dir` moves them to
+`<spool_dir>/<job id>/`. They are deleted when the job completes (and the `tmp/` folder with them, once empty), and
+when the job is deleted. A job started by an older version keeps using its `<job folder>/spool/`, so a resume
+does not download again. A paused, interrupted or failed job keeps them so a resume does not download again.
 
 `state.json` and `control.json` are always written atomically (temporary file, then rename), so a reader never
 sees half a file.

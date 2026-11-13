@@ -17,6 +17,7 @@ import zarr
 from zarr.codecs import BloscCodec
 
 from . import __version__
+from .http import Fatal
 from .planner import Plan
 
 
@@ -440,12 +441,107 @@ async def _copy_store(src, dst, concurrency: int = 32, progress=None) -> int:
     return len(keys)
 
 
+class ExportVerificationError(Fatal):
+    """The exported Zarr store differs from the committed Icechunk state."""
+
+
+def _same_value(a, b) -> bool:
+    if a is b:
+        return True
+    try:
+        return bool(a == b) or (a != a and b != b)  # NaN fill values
+    except Exception:
+        return False
+
+
+def verify_export(src_store, out: str, memory_gb: float = 16.0, progress=None) -> int:
+    """Check an exported Zarr store against the Icechunk state it came from: same hierarchy, metadata
+    (shape, dtype, dimension names, fill value, attributes) and, for every array, identical values (NaN equals NaN).
+    Compared block by block within the memory budget. Raises ``ExportVerificationError`` listing up to 10
+    problems; returns the number of arrays checked."""
+    import itertools
+
+    src = zarr.open_group(src_store, mode="r")
+    try:
+        dst = zarr.open_group(out, mode="r", use_consolidated=False)  # the real metadata, not the summary
+    except Exception as e:
+        raise ExportVerificationError(f"exported store cannot be opened: {e}") from e
+    problems: list[str] = []
+    s_members = dict(src.members(max_depth=None))
+    d_members = dict(dst.members(max_depth=None))
+    for k in sorted(set(s_members) - set(d_members)):
+        problems.append(f"missing in export: {k}")
+    for k in sorted(set(d_members) - set(s_members)):
+        problems.append(f"unexpected in export: {k}")
+    if dict(src.attrs) != dict(dst.attrs):
+        problems.append("root attributes differ")
+
+    pairs = [(k, s_members[k], d_members[k]) for k in sorted(set(s_members) & set(d_members))]
+    arrays = []
+    for k, a, b in pairs:
+        if isinstance(a, zarr.Group) != isinstance(b, zarr.Group):
+            problems.append(f"{k}: group/array mismatch")
+        elif isinstance(a, zarr.Group):
+            if dict(a.attrs) != dict(b.attrs):
+                problems.append(f"{k}: attributes differ")
+        elif (a.shape, a.dtype) != (b.shape, b.dtype):
+            problems.append(f"{k}: shape/dtype {a.shape} {a.dtype} != {b.shape} {b.dtype}")
+        else:
+            if a.metadata.dimension_names != b.metadata.dimension_names:
+                problems.append(f"{k}: dimension names differ")
+            if not _same_value(a.fill_value, b.fill_value):
+                problems.append(f"{k}: fill value differs")
+            if dict(a.attrs) != dict(b.attrs):
+                problems.append(f"{k}: attributes differ")
+            arrays.append((k, a, b))
+    if not problems and dst.metadata.consolidated_metadata is not None:  # the summary readers use must agree
+        try:
+            dc = zarr.open_group(out, mode="r", use_consolidated=True)
+            for k, _, b in pairs:
+                if dict(dc[k].attrs) != dict(b.attrs) or dc[k].metadata.to_dict() != b.metadata.to_dict():
+                    problems.append(f"{k}: consolidated metadata is stale")
+        except Exception as e:
+            problems.append(f"consolidated metadata unreadable: {e}")
+    if problems:
+        raise ExportVerificationError("export verification failed: " + "; ".join(problems[:10]))
+
+    budget = max(memory_gb * 1e9 / 4, 64e6)  # two blocks in flight plus comparison temporaries
+    blocks = []
+    for k, a, b in arrays:
+        if a.size == 0:
+            continue
+        unit = list(b.shards or b.chunks)
+        blk = _block_shape(a.chunks, unit, a.shape, budget, a.dtype.itemsize)
+        starts = list(itertools.product(*[range(0, n, x) for n, x in zip(a.shape, blk)]))
+        blocks.append((k, a, b, blk, starts))
+    total = sum(len(x[4]) for x in blocks)
+    done = 0
+    for k, a, b, blk, starts in blocks:
+        floaty = a.dtype.kind in "fcmM"
+        for st in starts:
+            sl = tuple(slice(s, min(s + x, n)) for s, x, n in zip(st, blk, a.shape))
+            x, y = a[sl], b[sl]
+            if not np.array_equal(x, y, equal_nan=floaty):
+                bad = (x != y) & ~((x != x) & (y != y)) if a.dtype.kind in "fcmM" else (x != y)
+                problems.append(f"{k}: {int(np.count_nonzero(bad))} values differ in block {sl}")
+                break
+            done += 1
+            if progress:
+                progress(done, total)
+    if problems:
+        raise ExportVerificationError("export verification failed: " + "; ".join(problems[:10]))
+    return len(arrays)
+
+
 def export_zarr(repo: ic.Repository, out: Path, progress=None, consolidated: bool = True, plan: Plan | None = None,
-                memory_gb: float = 16.0) -> int:
+                memory_gb: float = 16.0, verify_progress=None) -> int:
     """Write the committed state of ``main`` as a plain Zarr v3 directory.
 
     With the staging layout and no sharding, chunk bytes are copied as-is; otherwise the data variables are
-    rechunked (and sharded) into the layout chosen in the job, one memory-bounded block at a time."""
+    rechunked (and sharded) into the layout chosen in the job, one memory-bounded block at a time.
+
+    The result is verified against the committed state (``verify_export``) before it replaces ``out``;
+    on a mismatch the partial store is removed, ``out`` is left untouched and ``ExportVerificationError`` is raised."""
     from .chunking import export_needs_rechunk
 
     tmp = out.with_name(out.name + ".partial")
@@ -459,6 +555,11 @@ def export_zarr(repo: ic.Repository, out: Path, progress=None, consolidated: boo
         n = asyncio.run(_copy_store(src, dst, progress=progress))
     if consolidated:
         zarr.consolidate_metadata(zarr.storage.LocalStore(str(tmp)))
+    try:  # a bad export must never replace a good one, nor let the Icechunk repository be deleted
+        verify_export(src, str(tmp), memory_gb=memory_gb, progress=verify_progress)
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
     if out.exists():
         shutil.rmtree(out)
     tmp.rename(out)

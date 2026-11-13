@@ -229,3 +229,44 @@ def test_extend_time_series_forward_and_backward(home, fake_edh):
     lon_i = lon_i[np.argsort(lon180[lon_i])]
     expect = fake_edh.data["t2m"][i][:, lat_i][:, :, lon_i]
     np.testing.assert_array_equal(ds3.t2m.values, expect)
+
+
+def test_export_verified_and_corruption_detected(home, fake_edh):
+    import pytest
+    import zarr
+
+    from edh_downloader import store
+
+    s = spec(fake_edh, home / "out", output=OutputSpec(directory=str(home / "out"), name="v", keepbits=None,
+                                                       export_zarr=True, keep_icechunk=True))
+    job = create_job(s)
+    assert run_foreground(job) == "completed"
+    repo = store.open_repo(s.icechunk_path)
+    src = repo.readonly_session("main").store
+    assert store.verify_export(src, str(s.zarr_path)) >= 1
+
+    # corrupt one value in the export: verification must fail
+    g = zarr.open_group(str(s.zarr_path), mode="r+")
+    good = g["t2m"][0, 0, 0]
+    g["t2m"][0, 0, 0] = good + 1
+    with pytest.raises(store.ExportVerificationError, match="t2m"):
+        store.verify_export(src, str(s.zarr_path))
+    g["t2m"][0, 0, 0] = good
+    assert store.verify_export(src, str(s.zarr_path)) >= 1
+
+    # metadata mismatch
+    g["t2m"].attrs["units"] = "bogus"
+    with pytest.raises(store.ExportVerificationError, match="attributes"):
+        store.verify_export(src, str(s.zarr_path))
+
+    # a failing re-export leaves the existing store untouched and no .partial behind
+    before = {p: p.stat().st_mtime for p in s.zarr_path.rglob("*") if p.is_file()}
+    orig = store.verify_export
+    store.verify_export = lambda *a, **k: (_ for _ in ()).throw(store.ExportVerificationError("boom"))
+    try:
+        with pytest.raises(store.ExportVerificationError):
+            store.export_zarr(repo, s.zarr_path)
+    finally:
+        store.verify_export = orig
+    assert {p: p.stat().st_mtime for p in s.zarr_path.rglob("*") if p.is_file()} == before
+    assert not s.zarr_path.with_name(s.zarr_path.name + ".partial").exists()

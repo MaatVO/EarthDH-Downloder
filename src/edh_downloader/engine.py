@@ -236,7 +236,8 @@ class Engine:
                                   progress=lambda d, t: self.activity(
                                       export={"done": d, "total": t, "path": str(spec.zarr_path),
                                               "since": (self._act.get("export") or {}).get("since")}))
-            self.log.info(f"exported {n} objects ({human_bytes(dir_bytes(spec.zarr_path))})")
+            self.log.info(f"exported {n} objects ({human_bytes(dir_bytes(spec.zarr_path))}); "
+                          f"verified identical to the Icechunk repository")
             self.save_state(exported=True)  # from here on, a crash only has to finish the cleanup
             if not spec.output.keep_icechunk:
                 self._remove_icechunk()
@@ -249,9 +250,7 @@ class Engine:
 
     def _done(self):
         spec = self.spec
-        spool = self.spool_dir()
-        if spool.exists():
-            shutil.rmtree(spool, ignore_errors=True)
+        spec.remove_spool(self.job_id, self.dir)
         if hasattr(self, "_act_lock"):
             with self._act_lock:
                 self._act = {"stage": "done"}
@@ -262,8 +261,7 @@ class Engine:
 
     # ---------------------------------------------------------------- spool
     def spool_dir(self) -> Path:
-        d = self.spec.download.spool_dir
-        return Path(d).expanduser() / self.job_id if d else self.dir / "spool"
+        return self.spec.spool_path(self.job_id, self.dir)
 
     def chunk_path(self, c) -> Path:
         var, _, t, li, ty, tx = c

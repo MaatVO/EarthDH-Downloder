@@ -80,6 +80,38 @@ def test_structure_of_two_stores_is_not_recomputed_on_every_refresh(home, fake_e
     assert len(calls) == 2, f"read the stores {len(calls)} times"
 
 
+def test_default_spool_is_tmp_in_the_output_folder(home):
+    s = JobSpec(variables=["t2m"])
+    s.output.directory = str(home / "out")
+    job = runner.create_job(s)
+    assert s.spool_path(job.name) == home / "out" / "tmp" / job.name
+    sp = s.spool_path(job.name)
+    sp.mkdir(parents=True)
+    (sp / "chunk").write_bytes(b"x" * 100)
+    other = home / "out" / "tmp" / "another-job"
+    other.mkdir()
+    s.remove_spool(job.name)  # leaves tmp/ while another job uses it
+    assert not sp.exists() and other.exists()
+    other.rmdir()
+    sp.mkdir()
+    service.job_delete(job.name)
+    assert not job.exists() and not (home / "out" / "tmp").exists()
+
+
+def test_a_job_started_with_the_old_spool_keeps_it(home):
+    """Resuming a job whose chunks are in <job folder>/spool must find them there, not start over in tmp/."""
+    s = JobSpec(variables=["t2m"])
+    s.output.directory = str(home / "out")
+    job = runner.create_job(s)
+    old = job / "spool" / "t2m"
+    old.mkdir(parents=True)
+    (old / "0.0.0").write_bytes(b"x" * 100)
+    assert s.spool_path(job.name, job) == job / "spool"
+    assert s.spool_path(job.name) == home / "out" / "tmp" / job.name  # a fresh job gets the new default
+    s.remove_spool(job.name, job)
+    assert not (job / "spool").exists()
+
+
 def test_delete_removes_a_custom_spool(home):
     s = JobSpec(variables=["t2m"])
     s.download.spool_dir = str(home / "spool")

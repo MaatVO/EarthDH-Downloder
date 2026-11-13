@@ -965,7 +965,7 @@ class CdsEngine(Engine):
         write_json_atomic(d / "manifest.json", {"dataset": self.spec.dataset, "job": self.job_id,
                                                 "files": manifest, "source": CdsOutput.provider,
                                                 **({"not_converted": why} if why else {})})
-        shutil.rmtree(self.spool_dir(), ignore_errors=True)
+        self.spec.remove_spool(self.job_id, self.dir)
         why = why or self.state.get("kept_files")
         self.save_state(status="completed", pid=None, finished_at=now_iso(),
                         message=f"done: kept as files ({why})" if why else "done", outputs=[str(d)],

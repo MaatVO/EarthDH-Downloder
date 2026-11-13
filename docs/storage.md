@@ -41,6 +41,12 @@ The export goes to `<name>.zarr.partial` and is renamed to `<name>.zarr` only wh
 metadata when `consolidated` is on. A crash after the export only has to finish the cleanup; a crash during it
 starts the export again.
 
+Before the rename, the partial store is verified against the Icechunk repository: same arrays and groups, same
+shape, dtype, dimension names, fill value and attributes, the consolidated metadata agrees with the real metadata,
+and every value is identical (NaN equals NaN), compared block by block within `memory_gb`. On any mismatch the
+partial store is deleted, an existing `<name>.zarr` is left untouched, the job fails, and the Icechunk repository
+is never removed, even with `keep_icechunk = false`.
+
 ## Chunk layouts
 
 ![Three chunk layouts of the same variable: time series chunks are long in time so a point over all years is one

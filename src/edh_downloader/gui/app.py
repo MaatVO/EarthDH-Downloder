@@ -1022,9 +1022,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     sample_status = ui.label().classes("edh-muted text-caption")
                     with ui.expansion("Download settings", icon="tune").classes("edh-expansion w-full edh-tour-settings"):
                         with ui.column().classes("w-full gap-3 p-2"):
-                            with_hint(ui.input("Temporary directory", placeholder="job folder").bind_value(
+                            with_hint(ui.input("Temporary directory", placeholder="output folder / tmp").bind_value(
                                 f, "spool_dir").classes("w-full"),
-                                "downloaded chunks wait here until processed; empty = in the job folder")
+                                "downloaded chunks wait here until processed; empty = a tmp/ folder inside the output folder")
                             with ui.row().classes("w-full gap-3 no-wrap"):
                                 with_hint(ui.number("Max temporary (GB)", min=1).bind_value(f, "max_spool_gb").classes("grow"),
                                           "downloads pause above this")

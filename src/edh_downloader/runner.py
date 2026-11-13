@@ -243,11 +243,10 @@ def delete(job_dir: Path, outputs: bool = False) -> None:
     st = status(job_dir)
     if st["alive"]:
         raise RuntimeError("stop the job first")
-    spool = (st.get("spec") or {}).get("download", {}).get("spool_dir")
-    if spool:  # temporary chunks kept outside the job folder
-        shutil.rmtree(Path(spool).expanduser() / job_dir.name, ignore_errors=True)
-    if outputs:
-        spec = JobSpec.from_dict(st["spec"])
+    spec = JobSpec.from_dict(st["spec"]) if st.get("spec") else None
+    if spec:  # temporary chunks live outside the job folder
+        spec.remove_spool(job_dir.name, job_dir)
+    if outputs and spec:
         for p in (spec.icechunk_path, spec.zarr_path):
             if p.exists():
                 shutil.rmtree(p)
