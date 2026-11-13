@@ -177,7 +177,7 @@ A restrained slate range lit by a single blue, with three status colours held in
 
 **The Data Encoding Rule.** The magenta-to-violet gradient exists only inside dataset structure diagrams, where it marks the selected chunk. It never appears on chrome.
 
-Implementation note: NiceGUI loads Quasar's `!important` rules in a CSS layer, and those beat unlayered `!important`, so a theme rule that must win over a Quasar utility such as `text-white` goes inside `@layer overrides`. Quasar's `accent` colour is mapped to Caution Amber and `secondary` to Signal Blue, so `color=accent` renders amber. The names `edh-grad-btn`, `edh-grad-bar` and `PINK` are legacy; all three now resolve to flat Signal Blue.
+Implementation note: NiceGUI loads Quasar's `!important` rules in a CSS layer, and those beat unlayered `!important`, so a theme rule that must win over a Quasar utility such as `text-white` goes inside `@layer overrides`. Quasar's `accent` colour is mapped to Caution Amber and `secondary` to Signal Blue, so `color=accent` renders amber. The names `edh-primary-btn`, `edh-grad-bar` and `PINK` are legacy; all three now resolve to flat Signal Blue.
 
 ## Typography
 
