@@ -41,6 +41,9 @@ html, body {{ background: var(--edh-bg) !important; color: var(--edh-text); font
 .edh-tabs .q-tab {{ border-radius: var(--edh-r); margin: 0 2px; padding: 0 16px; min-height: 36px; color: var(--edh-muted); }}
 .edh-tab-active {{ background: var(--edh-surface-2); color: var(--edh-text) !important; }}
 .edh-panels, .edh-panels .q-tab-panel {{ background: transparent !important; }}
+/* Quasar makes the panel and its parent clip/scroll containers, which turns position:sticky into "sticky inside the panel": the Summary
+   sat 80px below the panel top (y=184, next to cards at 120) and never stuck. The page scrolls, not the panel. */
+.edh-panels, .edh-panels .q-panel.scroll {{ overflow: visible !important; }}
 
 /* surfaces */
 .edh-card {{ background: var(--edh-surface) !important; border: 1px solid var(--edh-line) !important; isolation: isolate; border-radius: var(--edh-r) !important;
@@ -48,6 +51,9 @@ html, body {{ background: var(--edh-bg) !important; color: var(--edh-text); font
 .edh-struct, .edh-kpi, .edh-opt, .edh-rec {{ background: var(--edh-surface-2) !important; border: 0 !important;
   border-radius: var(--edh-r) !important; box-shadow: none !important; }}
 .edh-struct {{ padding: 16px; }}
+.edh-struct {{ min-width: 0; max-width: 100%; }}
+/* a row of variable names is as wide as the names: wrap it instead of widening the page */
+.edh-struct .q-btn-group {{ flex-wrap: wrap; max-width: 100%; }}
 .edh-kpi {{ padding: 8px 12px; }}
 .edh-rec {{ padding: 8px 12px; }}
 /* job card: what a running job is doing; the request table's states */
@@ -91,7 +97,7 @@ a {{ color: var(--edh-accent-text); }}
 /* NiceGUI loads Quasar's !important rules in a layer, and those beat unlayered !important. An earlier layer beats them. */
 @layer overrides {{
   .q-btn:focus-visible, .q-tab:focus-visible, .q-checkbox:focus-visible, .q-toggle:focus-visible,
-  .edh-opt:focus-visible, a:focus-visible, .edh-ctab:focus-visible, .edh-quota-link:focus-visible {{
+  .edh-opt:focus-visible, .q-item:focus-visible, .q-expansion-item .q-focusable:focus-visible, a:focus-visible, .edh-ctab:focus-visible, .edh-quota-link:focus-visible {{
     outline: 2px solid var(--edh-accent-text) !important; outline-offset: 2px; }}
   .q-field--focused .q-field__control:after, .q-field--highlighted .q-field__control:after {{ border-color: var(--edh-accent-text) !important; border-width: 2px !important; }}
   .q-btn.bg-primary, .edh-primary-btn, .edh-primary-btn.bg-primary {{ color: var(--edh-bg) !important; }}
@@ -109,7 +115,14 @@ a {{ color: var(--edh-accent-text); }}
 .edh-bar-negative {{ --edh-bar: var(--edh-err); }}
 .edh-bar-grey-6 {{ --edh-bar: var(--edh-muted); }}
 .edh-job-tiles {{ display: grid; grid-template-columns: repeat(4, 11rem); gap: 12px; }}
-.edh-kpi-value, .edh-tabular {{ font-variant-numeric: tabular-nums; }}
+.edh-kpi-value, .edh-hero-value, .edh-tabular {{ font-variant-numeric: tabular-nums; }}
+/* the one figure that leads on New job: what this job costs in requests */
+.edh-hero-value {{ font-size: var(--edh-fs-xl); font-weight: 500; line-height: 1.1; }}
+.edh-mobile-bar {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-overlay); padding: 12px 16px;
+  background: var(--edh-surface); border-top: 1px solid var(--edh-line); transition: transform 160ms ease-out; }}
+.edh-mobile-bar.edh-bar-hidden {{ transform: translateY(100%); }}
+.edh-bar-text {{ font-size: var(--edh-fs-sm); }}
+@media (max-width: 1023px) {{ .nicegui-content {{ padding-bottom: 88px !important; }} }}
 @media (max-width: 767px) {{ .edh-job-tiles {{ width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .edh-grad-bar .q-linear-progress__track {{ background: var(--edh-surface-2) !important; opacity: 1 !important; }}
 .q-chip {{ border-radius: 4px; }}
@@ -196,6 +209,12 @@ a {{ color: var(--edh-accent-text); }}
 .edh-tour-btn {{ min-height: 32px; min-width: 32px; font-size: var(--edh-fs-xs); }}
 .edh-quota-link {{ min-width: 24px; min-height: 24px; align-items: center; justify-content: center; }}
 @media (pointer: coarse) {{ .edh-tour-btn, .edh-quota-link {{ min-height: 44px; min-width: 44px; }} }}
+/* help icons: 18px glyph, 24px target (WCAG 2.5.8), 44px on touch; negative margin keeps the layout */
+.edh-tip {{ padding: 3px; margin: -3px; }}
+@media (pointer: coarse) {{
+  .edh-tip {{ padding: 13px; margin: -13px; }}
+  .edh-table .q-checkbox {{ min-width: 44px; min-height: 44px; justify-content: center; }}
+}}
 
 /* browser surfaces */
 ::selection {{ background: var(--edh-selected); color: var(--edh-text); }}
@@ -203,7 +222,7 @@ html {{ scrollbar-color: var(--edh-surface-2) var(--edh-bg); }}
 
 /* phones */
 @media (max-width: 639px) {{
-  .nicegui-content {{ padding: 12px !important; }}
+  .nicegui-content {{ padding: 12px 12px 88px !important; }}  /* 88px: room for the plan bar */
   .edh-card {{ padding: 16px !important; }}
   .edh-tabs .q-tab__icon {{ display: none; }}
   .edh-tabs .q-tab {{ min-height: 44px; padding: 0 12px; }}
@@ -216,6 +235,10 @@ html {{ scrollbar-color: var(--edh-surface-2) var(--edh-bg); }}
 def apply_theme() -> None:
     ui.add_head_html(CSS)
     ui.add_head_html('<script>document.documentElement.lang = "en";</script>')
+    # Quasar's own page loading bar is a progressbar without a name
+    ui.add_head_html('<script>new MutationObserver(() => document.querySelectorAll("[role=progressbar]:not([aria-label])")'
+                     '.forEach(e => e.setAttribute("aria-label", "Loading"))).observe(document.documentElement, '
+                     '{childList: true, subtree: true});</script>')
     ui.dark_mode(True)
     ui.colors(primary=ACCENT, secondary=ACCENT, accent=WARN, dark=SURFACE, dark_page=BG,
               positive=OK, negative=ERR, warning=WARN, info=ACCENT)

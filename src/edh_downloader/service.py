@@ -463,7 +463,30 @@ def store_inspect(path: str) -> dict:
     return store.inspect_icechunk_for_extend(path)
 
 
+def list_dirs(path: str = "") -> dict:
+    """Sub-folders of ``path`` on this machine, for the output-folder picker. A path that does not exist (yet) shows its
+    nearest existing parent, so a typed new folder still opens somewhere useful. ``recent``: folders earlier jobs wrote to."""
+    p = Path(path or "~").expanduser()
+    while not p.is_dir() and p.parent != p:
+        p = p.parent
+    try:
+        names = sorted((d.name for d in p.iterdir() if d.is_dir() and not d.name.startswith(".")), key=str.casefold)
+    except OSError:
+        names = []
+    recent: list[str] = []
+    try:
+        for j in runner.list_jobs():
+            for o in j.get("outputs") or []:
+                d = str(Path(o).parent)
+                if d not in recent:
+                    recent.append(d)
+    except OSError:
+        pass
+    return {"path": str(p), "parent": str(p.parent) if p.parent != p else None, "dirs": names[:500],
+            "truncated": len(names) > 500, "home": str(Path.home()), "recent": recent[:5]}
+
+
 METHODS = {f.__name__: f for f in (
     hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
     collections, datasets, cds_describe, cds_check, cds_options, cds_plan, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
-    job_connections, job_inflight, job_requests, job_delete, job_log, store_structure, store_inspect)}
+    job_connections, job_inflight, job_requests, job_delete, job_log, store_structure, store_inspect, list_dirs)}

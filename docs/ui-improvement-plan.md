@@ -4,6 +4,10 @@ Source: seven design reviews run on the running UI (design-analysis, craft, acce
 
 Written for: the maintainer of Weather Dataset Downloader, to work through in order.
 
+## Status (2026-11-13)
+
+Phases 1 to 4 shipped in e746146. Phase 0 and the remaining items (Summary offset, mobile plan bar, tooltip keyboard access, folder picker, helper text instead of help icons, axe fixes) are done and recorded in [ui-review-evidence.md](ui-review-evidence.md), including what was not done.
+
 ## Scope and limits
 
 - Reviewed: New job, Jobs (empty) and Keys at 1440px and 390px, and `gui/theme.py`.

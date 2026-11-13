@@ -436,6 +436,8 @@ def dataset_image(url: str | None, alt: str, size: str):
             return
         img = ui.image(url).props("no-spinner no-transition fit=contain")
         img.props(f'alt="{alt.replace(chr(34), "")}"')
+        if not alt:  # decorative: Quasar gives the wrapper role=img with an empty name, which a screen reader must not see
+            img.props("role=presentation aria-hidden=true")
         with img.add_slot("error"):
             with ui.element("div").classes("absolute-full flex flex-center"):
                 ui.icon("public", size="20px")
@@ -468,10 +470,23 @@ def option_template(urls: list[str | None]) -> str:
 
 
 def tip(text: str):
-    """A small '?' icon that explains something on hover."""
+    """A small '?' icon that explains something on hover or focus. Keyboard: Tab to it, Esc closes. Screen readers
+    get the text as the button's name, so they do not depend on the tooltip appearing."""
     with ui.icon("help_outline", size="18px").classes("edh-tip cursor-help") as icon:
-        ui.tooltip(text).classes("edh-tooltip")
+        tt = ui.tooltip(text).classes("edh-tooltip")
+    icon.props('tabindex=0 role=button aria-hidden=false')  # Quasar sets aria-hidden on icons; a button must not have it
+    icon.props["aria-label"] = text
+    icon.on("focus", lambda: tt.run_method("show"))
+    icon.on("blur", lambda: tt.run_method("hide"))
+    icon.on("keydown.escape", lambda: tt.run_method("hide"))
     return icon
+
+
+def with_hint(field, text: str):
+    """One line of helper text under a field, for what is worth saying but not worth a '?'."""
+    field.props["hint"] = text
+    field.update()
+    return field
 
 
 def with_tip(field, text: str):
@@ -745,6 +760,12 @@ def build_page(be, local: bool = False, embedded: bool = False):
                             var_table = ui.table(rows=[], columns=list(VAR_COLUMNS), row_key="name", selection="multiple", pagination=8).props("flat dense").classes("edh-table w-full")
                             with var_table.add_slot("no-data"):
                                 var_empty = ui.label("Load a dataset to list its variables.").classes("edh-muted")
+                            # the selection checkboxes need names a screen reader can say
+                            var_table.add_slot("header-selection",
+                                               '<q-checkbox v-model="props.selected" dense dark aria-label="Select all variables" />')
+                            var_table.add_slot("body-selection",
+                                               '<q-checkbox v-model="props.selected" dense dark '
+                                               ':aria-label="`Select ${props.row.name}`" />')
                             var_search.bind_value(var_table, "filter")
                             with ui.row().classes("items-center gap-2") as level_row:
                                 level_select = ui.select([], multiple=True, label="Pressure levels (hPa)").props(
@@ -764,17 +785,18 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                             ui.date().bind_value(inp)
                                         with inp.add_slot("append"):
                                             ui.icon("event").on("click", menu.open).classes("cursor-pointer").props(
-                                                'role=button tabindex=0 aria-label="Pick a date"').on(
+                                                'role=button tabindex=0 aria-hidden=false aria-label="Pick a date"').on(
                                                 "keydown.enter", menu.open)
                                             if key_ == "end":
                                                 ui.button("Today", on_click=lambda: f.update(end=date.today().isoformat())).props(
                                                     "flat dense no-caps size=sm").tooltip("set the last day to today")
-                                    hour_inputs.append(with_tip(
-                                        ui.number("First day, from hour" if hkey == "start_hour" else "Last day, to hour (incl.)",
+                                    hour_inputs.append(with_hint(
+                                        ui.number("Start hour" if hkey == "start_hour" else "End hour (included)",
                                                   min=0, max=23, step=1, precision=0).bind_value(f, hkey).classes("w-44"),
-                                        "Hour of day (0-23, local time with the UTC offset below). First day starts "
-                                        "at this hour; last day ends at the end of this hour."))
+                                        "first day, 0-23" if hkey == "start_hour" else "last day, 0-23"))
                                 time_range_label = ui.label().classes("edh-muted text-caption")
+                            ui.label("Hours are local time: UTC plus the offset below (0 = UTC).").classes(
+                                "edh-muted text-caption")
                             with ui.row().classes("items-center gap-4"):
                                 freq_select = with_tip(ui.select(FREQS, label="Time step").bind_value(f, "freq").classes("w-48"),
                                          "As stored keeps every hour. Other steps aggregate hours into periods using the "
@@ -782,9 +804,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 ui.number("Hours per step", min=1, max=24 * 31, step=1).bind_value(f, "hours").classes(
                                     "w-40").bind_visibility_from(f, "freq", lambda v: v == "hours")
                                 with ui.row().classes("items-center gap-1 no-wrap") as tz_row:
-                                    with_tip(ui.number("UTC offset (h)", min=-12, max=14, step=1).bind_value(
+                                    with_hint(ui.number("UTC offset (h)", min=-12, max=14, step=1).bind_value(
                                         f, "tz_offset").classes("w-36"),
-                                        "Shifts where days/months start. 0 = UTC days; 1 = days from 00:00 CET.")
+                                        "0 = UTC days, 1 = from 00:00 CET")
                                 tz_row.bind_visibility_from(f, "freq", lambda v: v != "none")
                             with ui.row().classes("items-center gap-1") as stats_head:
                                 ui.label("Statistics per variable").classes("text-body2")
@@ -808,7 +830,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                         ui.number("South", min=-90, max=90, format="%.2f").bind_value(f, "south")
                                         ui.number("West", min=-180, max=360, format="%.2f").bind_value(f, "west")
                                         ui.number("East", min=-180, max=360, format="%.2f").bind_value(f, "east")
-                                    with ui.row().classes("gap-2 w-full"):
+                                    with ui.row().classes("gap-x-1 gap-y-0 w-full"):
                                         for pname, b in PRESETS.items():
                                             ui.button(pname, on_click=lambda b=b: set_bbox(*b)).props("flat dense no-caps color=primary")
                                     ui.label("Or draw a rectangle on the map.").classes("edh-muted text-caption")
@@ -866,7 +888,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 f, "target_mode").props("no-caps unelevated toggle-color=primary").classes("edh-toggle")
 
                         with ui.row().classes("w-full items-center gap-4 no-wrap max-md:flex-wrap") as new_store_row:
-                            ui.input("Directory (on the server)").bind_value(f, "directory").classes("grow")
+                            with ui.row().classes("grow items-center gap-1 no-wrap"):
+                                ui.input("Directory (on the server)").bind_value(f, "directory").classes("grow")
+                                ui.button(icon="folder_open", on_click=lambda: later(pick_folder)).props(
+                                    'flat round aria-label="Choose a folder on the server"').tooltip("choose a folder")
                             ui.input("Name").bind_value(f, "name").classes("w-64")
                             fmt_select = with_tip(ui.select({"zarr": "Zarr", "both": "Zarr + Icechunk", "icechunk": "Icechunk only"},
                                                label="Format").bind_value(f, "out_format").classes("w-48"),
@@ -963,18 +988,17 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                         "read granularity. Useful above ~20,000 chunk files. Needs Zarr v3 readers "
                                         "(zarr-python ≥ 3, xarray ≥ 2024.10).")
                                 with ui.row().classes("items-center gap-1 no-wrap") as shard_auto_row:
-                                    ui.switch("Auto size").bind_value(f, "shard_auto")
-                                    tip("Picks chunks per shard so each shard is about 512 MB.")
+                                    ui.switch("Auto size (about 512 MB a shard)").bind_value(f, "shard_auto")
                                 shard_auto_row.bind_visibility_from(f, "sharding")
                                 with ui.row().classes("items-center gap-3") as shard_custom:
                                     ui.number("Chunks/shard: time", min=1, step=1).bind_value(f, "shard_time").classes("w-40")
                                     ui.number("Chunks/shard: lat, lon", min=1, step=1).bind_value(f, "shard_space").classes("w-44")
                                 shard_custom.bind_visibility_from(f, "sharding", lambda v: v and not f["shard_auto"])
                                 shard_hint = ui.label().classes("edh-muted text-caption")
-                            with_tip(ui.textarea("Extra global attributes", placeholder="project = MY-PROJECT\n"
-                                                 "contact = name@example.org").bind_value(f, "extra_attrs")
-                                     .props("rows=2").classes("w-full"),
-                                     "One 'key = value' per line, added to the dataset's global attributes.")
+                            with_hint(ui.textarea("Extra global attributes", placeholder="project = MY-PROJECT\n"
+                                                  "contact = name@example.org").bind_value(f, "extra_attrs")
+                                      .props("rows=2").classes("w-full"),
+                                      "one key = value per line, added to the dataset's global attributes")
                         enc_box.bind_visibility_from(f, "out_format", lambda v: v != "icechunk" and not ctx.get("files_only"))
 
                 # ---------- summary (sticky)
@@ -998,20 +1022,16 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     sample_status = ui.label().classes("edh-muted text-caption")
                     with ui.expansion("Download settings", icon="tune").classes("edh-expansion w-full edh-tour-settings"):
                         with ui.column().classes("w-full gap-3 p-2"):
-                            with_tip(ui.input("Temporary directory", placeholder="job folder").bind_value(
+                            with_hint(ui.input("Temporary directory", placeholder="job folder").bind_value(
                                 f, "spool_dir").classes("w-full"),
-                                "Downloaded chunks wait here, still compressed, until they are processed and "
-                                "deleted. Empty = inside the job folder (~/.local/share/edh-dl/jobs). Pick a disk "
-                                "with free space.")
+                                "downloaded chunks wait here until processed; empty = in the job folder")
                             with ui.row().classes("w-full gap-3 no-wrap"):
-                                with_tip(ui.number("Max temporary (GB)", min=1).bind_value(f, "max_spool_gb").classes("grow"),
-                                         "Downloads pause when the temporary directory holds more than this, until "
-                                         "processing catches up (an ERA5 chunk is ~3.5 MB).")
-                                with_tip(ui.number("Min free disk (GB)", min=0).bind_value(f, "min_free_gb").classes("grow"),
-                                         "Downloads pause when free space on the temporary or output disk drops below "
-                                         "this; the job stops with an error rather than fill the disk.")
-                            with_tip(ui.number("Memory (GB)", min=0.5, step=0.5).bind_value(f, "memory_gb").classes("w-full"),
-                                     "RAM the processing and export may use at once. Lower it on a busy shared server.")
+                                with_hint(ui.number("Max temporary (GB)", min=1).bind_value(f, "max_spool_gb").classes("grow"),
+                                          "downloads pause above this")
+                                with_hint(ui.number("Min free disk (GB)", min=0).bind_value(f, "min_free_gb").classes("grow"),
+                                          "the job stops below this")
+                            with_hint(ui.number("Memory (GB)", min=0.5, step=0.5).bind_value(f, "memory_gb").classes("w-full"),
+                                      "most RAM processing and export may use")
                             with ui.column().classes("w-full gap-3") as cds_settings:
                                 with_tip(ui.number("Requests waiting on the CDS", min=1, max=32, step=1).bind_value(
                                     f, "max_inflight").classes("w-full"),
@@ -1044,6 +1064,18 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         ui.button("Download job.json", icon="file_download", on_click=lambda: save_job_file()).props(
                             "flat no-caps color=grey-5").classes("w-full")
                     ui.label("Runs in the background: you can close this page.").classes("edh-muted text-caption")
+
+                # narrow screens: the Summary comes last, thousands of pixels down. This bar keeps the cost in view and
+                # jumps there; it hides itself while the Summary is on screen.
+                with ui.row().classes("edh-mobile-bar items-center justify-between gap-3 no-wrap lg:hidden") as mobile_bar:
+                    plan_bar_text = ui.label("Select variables to see the plan").classes("edh-bar-text").props("role=status")
+                    ui.button("Review and launch", on_click=lambda: ui.run_javascript(
+                        "document.querySelector('.edh-summary').scrollIntoView({behavior: 'smooth', block: 'start'})")
+                    ).props("unelevated no-caps").classes("edh-primary-btn shrink-0")
+                ui.timer(0.8, lambda: ui.run_javascript(
+                    "const s = document.querySelector('.edh-summary'), b = document.querySelector('.edh-mobile-bar');"
+                    "if (s && b) new IntersectionObserver(([e]) => b.classList.toggle('edh-bar-hidden', e.isIntersecting))"
+                    ".observe(s);"), once=True)
 
         # ================================================================ JOBS
         with ui.tab_panel(t_jobs).classes("px-0 edh-tour-jobs"):
@@ -1590,6 +1622,49 @@ def build_page(be, local: bool = False, embedded: bool = False):
     area_map.on("draw:created", on_draw)
 
     # ------------------------------------------------------------------ spec + plan
+    async def pick_folder():
+        """Browse folders on the machine that does the work (this computer, or the server over SSH)."""
+        state = {"path": (f.get("directory") or "").strip()}
+        with ui.dialog() as dlg, ui.card().classes("edh-card gap-3").style("width:min(520px,94vw)"):
+            ui.label("Choose the output folder").classes("edh-title").props("role=heading aria-level=2")
+            here = ui.label().classes("edh-mono text-caption break-all").props("role=status")
+            quick = ui.row().classes("gap-1")
+            listing = ui.column().classes("w-full gap-0 edh-scroll").style("max-height:40vh;overflow-y:auto")
+
+            async def show(path):
+                res = await call("list_dirs", path=path)
+                if not res:
+                    return
+                state["path"] = res["path"]
+                here.text = res["path"]
+                quick.clear()
+                with quick:
+                    for label, target in [("Home", res["home"]), ("Default", be.info["default_dir"]),
+                                          *[(Path(r).name or r, r) for r in res["recent"]]]:
+                        ui.button(label, on_click=lambda t=target: show(t)).props("flat dense no-caps")
+                listing.clear()
+                with listing:
+                    if res["parent"]:
+                        ui.button("..  (parent folder)", icon="arrow_upward",
+                                  on_click=lambda: show(res["parent"])).props("flat no-caps align=left").classes("w-full")
+                    for d in res["dirs"]:
+                        ui.button(d, icon="folder", on_click=lambda d=d: show(f"{res['path'].rstrip('/')}/{d}")).props(
+                            "flat no-caps align=left").classes("w-full")
+                    if not res["dirs"]:
+                        ui.label("No sub-folders here.").classes("edh-muted text-caption p-2")
+                    if res.get("truncated"):
+                        ui.label("Only the first 500 folders are shown.").classes("edh-muted text-caption p-2")
+
+            def use():
+                f["directory"] = state["path"]
+                dlg.close()
+
+            with ui.row().classes("justify-end w-full gap-2"):
+                ui.button("Cancel", on_click=dlg.close).props("flat no-caps")
+                ui.button("Use this folder", on_click=use).props("unelevated no-caps").classes("edh-primary-btn")
+        dlg.open()
+        await show(state["path"])
+
     async def inspect_target():
         p = (f.get("target_store") or "").strip()
         extend_alert.set_visibility(False)
@@ -1711,6 +1786,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
     def block_launch(reason: str = "", **kw):
         """Disable Launch and say why in one line under it (the reasons come from the same checks)."""
         launch_btn.disable()
+        plan_bar_text.text = "Planning…" if kw.get("planning") else "Select variables to see the plan"
         text = launch_reason(False, bool(f.get("key")), **({"error": reason} if reason else {}), **kw)
         launch_why.text = text
         launch_why.set_visibility(bool(text))
@@ -1805,6 +1881,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
     def render_cds_summary(res, spec_):
         s = res["summary"]
+        plan_bar_text.text = (f"{s['requests']:,} request{'s' if s['requests'] != 1 else ''}"
+                              + (f" · ≈ {human_bytes(s['download_bytes_est'])}" if s["download_bytes_est"] else ""))
         summary.clear()
         blocked = []
         with summary:
@@ -1813,9 +1891,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 share = (lim["cost"] or lim["fields"]) / lim["limit"] if lim["limit"] else 0
                 ui.circular_progress(value=min(1.0, share), show_value=False, size="84px",
                                      color="positive" if share <= 1 else "negative").props(
-                    "thickness=0.18 track-color=grey-9")
+                    'thickness=0.18 track-color=grey-9 aria-label="Share of the largest request\'s limit used"')
                 with ui.column().classes("gap-0"):
-                    ui.label(f"{s['requests']:,}").classes("edh-kpi-value")
+                    ui.label(f"{s['requests']:,}").classes("edh-hero-value")
                     ui.label("request" + ("s" if s["requests"] != 1 else "") + " to the CDS queue").classes("edh-muted")
                     ui.label(f"largest uses {100 * share:.0f}% of the dataset's limit"
                              + ("" if res["checked"] else " (local count)")).classes("text-caption edh-muted")
@@ -1924,6 +2002,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
         est = plan["est"]
         ctx["est"] = est
         render_conn_hint(plan, smp)
+        plan_bar_text.text = f"{s['requests']:,} requests · ≈ {human_bytes(est['download'])}"
         n_s = plan["sample_n"]
         sample_btn.text = f"Measure on a sample · {n_s} request{'s' if n_s != 1 else ''}"
         k = plan["key"]
@@ -1937,9 +2016,9 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 ring = min(1.0, share) if k else 0
                 color = "positive" if share <= 0.5 else "warning" if share <= 1 else "negative"
                 ui.circular_progress(value=ring, show_value=False, size="84px", color=color).props(
-                    "thickness=0.18 track-color=grey-9")
+                    'thickness=0.18 track-color=grey-9 aria-label="Share of the remaining monthly quota this job uses"')
                 with ui.column().classes("gap-0"):
-                    ui.label(f"{s['requests']:,}").classes("edh-kpi-value")
+                    ui.label(f"{s['requests']:,}").classes("edh-hero-value")
                     ui.label("requests").classes("edh-muted")
                     if k:
                         ui.label(f"{100 * share:.1f}% of {left:,} left this month" if share <= 1 else
@@ -2745,7 +2824,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             with ui.row().classes("w-full items-center gap-6 no-wrap"):
                 ui.circular_progress(value=min(1, pct), show_value=False, size="64px",
                                      color="negative" if pct > 0.9 else "warning" if pct > 0.7 else "secondary").props(
-                    "thickness=0.2 track-color=grey-9")
+                    'thickness=0.2 track-color=grey-9 aria-label="Share of the monthly quota used"')
                 with ui.column().classes("gap-0"):
                     ui.label(f"{q['used']:,} / {k['quota']:,}").classes("edh-kpi-value")
                     ui.label(f"requests used in {q['month']} · this app {q['app']:,} · "

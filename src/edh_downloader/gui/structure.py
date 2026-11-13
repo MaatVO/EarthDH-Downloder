@@ -166,7 +166,8 @@ def tree_html(d: dict, max_vars: int | None = None) -> str:
                     f'variable{"s" if hidden != 1 else ""}</div>')
     rows.append(f'<div class="st-row st-sub st-codecs"><span class="material-icons st-ic st-attr">compress</span>'
                 f'codecs <b>{e(d["codecs"])}</b></div>')
-    return '<div class="edh-tree">' + "".join(rows) + "</div>"
+    return ('<div class="edh-tree" tabindex="0" role="region" aria-label="Structure of the output dataset">'
+            + "".join(rows) + "</div>")
 
 
 # ------------------------------------------------------------------ chunk grid drawing (SVG)

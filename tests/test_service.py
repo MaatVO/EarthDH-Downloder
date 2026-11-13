@@ -37,3 +37,20 @@ def test_plan_and_jobs_through_the_backend(home, fake_edh):
 def test_agent_bundle_is_small_and_deterministic():
     a, b = bundle.build(), bundle.build()
     assert a == b and len(a[0]) < 400_000
+
+
+def test_list_dirs_for_the_folder_picker(tmp_path):
+    from edh_downloader import service
+
+    (tmp_path / "b_out").mkdir()
+    (tmp_path / "A_out").mkdir()
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / "file.txt").write_text("x")
+    r = service.list_dirs(str(tmp_path))
+    assert r["path"] == str(tmp_path)
+    assert r["dirs"] == ["A_out", "b_out"]  # folders only, no dotfolders, sorted ignoring case
+    assert r["parent"] == str(tmp_path.parent)
+    # a folder that does not exist yet opens at its nearest existing parent
+    assert service.list_dirs(str(tmp_path / "new" / "deeper"))["path"] == str(tmp_path)
+    assert service.list_dirs("")["path"] == r["home"]
+    assert service.list_dirs("/")["parent"] is None
