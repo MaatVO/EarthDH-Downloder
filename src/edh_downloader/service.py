@@ -156,6 +156,14 @@ def cds_check(dataset: str, request: dict) -> dict:
     return {"invalid": cds_catalog.invalid(table, request), "allowed": cds_catalog.allowed(table, request)}
 
 
+def cds_options(dataset: str, selection: dict) -> dict:
+    """The dataset options that apply to a selection, with their possible values (local, free): what the form
+    shows. ``selection``: the request fields chosen so far (variable, levels, options)."""
+    from .sources.cds import catalog as cds_catalog
+
+    return cds_catalog.option_state(cds_catalog.describe(dataset), cds_catalog.constraints(dataset), selection)
+
+
 def dataset_load(info: dict, key: str, refresh: bool = False) -> dict:
     k = keys.get_key(key)
     url = info["url"]
@@ -182,15 +190,16 @@ def _plan(spec: dict) -> Plan:
 # ------------------------------------------------------------------ plan, sample
 
 CDS_SHAPES_CHECKED = 12  # costing calls per plan at most (one per distinct request size)
+_CDS_COSTS_LOCK = threading.Lock()  # plans run in worker threads
 _CDS_COSTS: dict[tuple[str, str], dict] = {}  # (dataset, request hash) -> costing answer: the form plans often
 
 
-def cds_plan(spec: dict) -> dict:
+def cds_plan(spec: dict, follow: bool = False) -> dict:
     """The CDS requests a spec needs, checked for free: the dataset's real cost limit and the cost of each
     distinct request size (costing), the constraints (local), the licences (one call). Needs no queue."""
     from .sources.cds import catalog as cds_catalog
-    from .sources.cds.client import CDSClient, CDSError
-    from .sources.cds.planner import DEFAULT_LIMIT, CdsPlan
+    from .sources.cds.client import AuthError, CDSClient, CDSError
+    from .sources.cds.planner import CdsPlan, default_limit, fit_costs
     from .util import read_json, write_json_atomic
     from .paths import cache_dir
 
@@ -200,42 +209,31 @@ def cds_plan(spec: dict) -> dict:
         table = cds_catalog.constraints(s.dataset)
         limits_path = cache_dir() / "cds_limits.json"
         limits = read_json(limits_path, {}, dict)
-        p = CdsPlan(s, desc, table, limit=float(limits.get(s.dataset) or DEFAULT_LIMIT))
+        p = CdsPlan(s, desc, table, limit=default_limit(s.dataset, limits))
     except (PlanError, ValueError, KeyError) as e:
         return {"ok": False, "error": str(e)}
     k = _key(s.download.key, sources.CDS)
-    checked, missing, note = False, None, None
+    checked, missing, note, key_refused = False, None, None, False
 
     async def check(p):
         async with CDSClient(k.secret, retries=2) as c:
             async def costing(r):
                 key = (s.dataset, r.hash)
-                if key not in _CDS_COSTS:
-                    _CDS_COSTS[key] = await c.costing(s.dataset, r.inputs)
-                    while len(_CDS_COSTS) > 5000:
-                        del _CDS_COSTS[next(iter(_CDS_COSTS))]
-                return _CDS_COSTS[key]
+                with _CDS_COSTS_LOCK:
+                    hit = _CDS_COSTS.get(key)
+                if hit is None:
+                    hit = await c.costing(s.dataset, r.inputs)
+                    with _CDS_COSTS_LOCK:
+                        _CDS_COSTS[key] = hit
+                        while len(_CDS_COSTS) > 5000:
+                            _CDS_COSTS.pop(next(iter(_CDS_COSTS)), None)
+                return hit
 
             have = await c.licences() if desc["licences"] else set()
-            biggest = max(p.requests, key=lambda r: r.fields)
-            first = await costing(biggest)
-            if first["limit"] and first["limit"] != p.limit:  # plan again with the dataset's own limit
-                limits[s.dataset] = first["limit"]
+            p = await fit_costs(p, lambda lim: CdsPlan(s, desc, table, limit=lim), costing, CDS_SHAPES_CHECKED)
+            if p.limit != limits.get(s.dataset):  # the dataset's own limit, for the next plans
+                limits[s.dataset] = p.limit
                 write_json_atomic(limits_path, limits)
-                p = CdsPlan(s, desc, table, limit=first["limit"])
-            for _ in range(2):
-                costs: dict[int, float] = {}
-                for r in sorted(p.requests, key=lambda r: -r.fields):
-                    if r.fields not in costs and len(costs) < CDS_SHAPES_CHECKED:
-                        costs[r.fields] = (await costing(r))["cost"]
-                for r in p.requests:
-                    r.cost = costs.get(r.fields)
-                over = max((r.cost / r.fields for r in p.requests if r.cost and r.fields), default=1.0)
-                if all(r.cost is None or r.cost <= p.limit for r in p.requests) or over <= 1:
-                    break
-                # CDS counts more than the local estimate: plan with a proportionally smaller limit, once
-                p = CdsPlan(s, desc, table, limit=p.limit / over)
-                p.limit = first["limit"] or p.limit
             return p, [l for l in desc["licences"] if (l["id"], l["revision"]) not in have]
 
     if k is None:
@@ -244,6 +242,8 @@ def cds_plan(spec: dict) -> dict:
         try:
             p, missing = asyncio.run(check(p))
             checked = True
+        except AuthError as e:
+            note, key_refused = f"the Climate Data Store refused the key: {e}", True
         except CDSError as e:
             note = f"costs not checked: {e}"
     alt = None
@@ -254,13 +254,48 @@ def cds_plan(spec: dict) -> dict:
                    "note": "time series for points come from a faster archive: one request per point"}
     return {"ok": True, "summary": p.summary(), "requests": [r.to_dict() for r in p.requests[:500]],
             "invalid": p.invalid(), "licences_missing": missing, "checked": checked, "note": note,
-            "alternative": alt}
+            "key_refused": key_refused,
+            "alternative": alt, **_cds_layout(p, follow)}
+
+
+def _shards(p) -> dict | None:
+    """Chunk files per variable, and shard files when sharding: for the first time-dependent variable."""
+    vp = next((v for v in p.vars if v.var.kind != "static"), p.vars[0]) if p.vars else None
+    if vp is None:
+        return None
+    ch, dims, sh = p.export_chunks(vp), p.out_dims(vp), p.export_shards(vp)
+    size = dict(zip(dims, p.out_shape(vp)))
+    return {"chunks": math.prod(math.ceil(size[d] / c) for d, c in zip(dims, ch)),
+            "files": math.prod(math.ceil(size[d] / c) for d, c in zip(dims, sh)) if sh else None}
+
+
+def _cds_layout(p, follow: bool) -> dict:
+    """The Zarr store a CDS plan will most likely produce (see ``CdsOutput.preview``): chunk layouts, shards and
+    structure, as for Earth Data Hub. Empty when the output is not a store or cannot be told yet."""
+    from .sources.cds.output import CdsOutput
+
+    if p.desc.get("tier") not in ("grib", "netcdf") or not p.convert or not p.variables:
+        return {}
+    try:
+        out = CdsOutput.preview(p)
+    except (PlanError, ValueError) as e:
+        return {"struct_error": str(e)}
+    if out is None or not out.vars:
+        return {}
+    rec = chunking.recommend(out)
+    if follow:
+        out.spec.output.chunk_layout = rec[0]
+    ratio = chunking.compression_ratio(out)
+    struct = structure.describe(out, ratio)
+    struct["notes"] = out.preview_notes
+    return {"rec": list(rec), "layout": out.spec.output.chunk_layout, "rows": chunking.analyze(out),
+            "shards": _shards(out), "struct": struct}
 
 
 def plan(spec: dict, connections: int, follow: bool) -> dict:
     """Everything the form shows about a spec: summary, chunk layouts, size estimates, dataset structure."""
     if spec.get("source") == sources.CDS:
-        return cds_plan(spec)
+        return cds_plan(spec, follow)
     try:
         p = _plan(spec)
     except (PlanError, ValueError) as e:
@@ -273,15 +308,7 @@ def plan(spec: dict, connections: int, follow: bool) -> dict:
         smp = None
     est = sample.estimate(p, smp, connections, chunking.compression_ratio(p))
     o = p.spec.output
-    shards = None
-    vp = next((v for v in p.vars if v.var.kind != "static"), p.vars[0]) if p.vars else None
-    if vp is not None:
-        ch = p.export_chunks(vp)
-        dims = p.out_dims(vp)
-        size = dict(zip(dims, p.out_shape(vp)))
-        sh = p.export_shards(vp)
-        shards = {"chunks": math.prod(math.ceil(size[d] / c) for d, c in zip(dims, ch)),
-                  "files": math.prod(math.ceil(size[d] / c) for d, c in zip(dims, sh)) if sh else None}
+    shards = _shards(p)
     k = _key((spec.get("download") or {}).get("key"))
     return {"ok": True, "summary": p.summary(), "rec": list(rec), "layout": o.chunk_layout,
             "rows": chunking.analyze(p), "est": est, "shards": shards,
@@ -438,5 +465,5 @@ def store_inspect(path: str) -> dict:
 
 METHODS = {f.__name__: f for f in (
     hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
-    collections, datasets, cds_describe, cds_check, cds_plan, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
+    collections, datasets, cds_describe, cds_check, cds_options, cds_plan, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
     job_connections, job_inflight, job_requests, job_delete, job_log, store_structure, store_inspect)}

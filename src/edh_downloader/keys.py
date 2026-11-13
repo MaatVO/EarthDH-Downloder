@@ -112,10 +112,14 @@ def netrc_secret() -> str | None:
 
 
 def cdsapirc_secret() -> str | None:
-    """The Climate Data Store token the ``cdsapi`` package would use: ``CDSAPI_URL``/``CDSAPI_KEY``, else the
-    ``url:``/``key:`` lines of ``$CDSAPI_RC`` or ``~/.cdsapirc``. Only for the current CDS (not another store)."""
+    """The Climate Data Store token the ``cdsapi`` package would use: ``CDSAPI_KEY`` (with ``CDSAPI_URL`` when set,
+    which may be left out), else the ``url:``/``key:`` lines of ``$CDSAPI_RC`` or ``~/.cdsapirc``. Only for the
+    current CDS (not another store).
+
+    The legacy form ``UID:APIKEY`` is accepted: the ``UID:`` part is dropped only when it is all digits (the old
+    numeric user id); any other key is returned as it is."""
     url, key = os.environ.get("CDSAPI_URL"), os.environ.get("CDSAPI_KEY")
-    if not (url and key):
+    if not key:
         path = Path(os.environ.get("CDSAPI_RC") or "~/.cdsapirc").expanduser()
         try:
             text = path.read_text(errors="replace")
@@ -127,6 +131,10 @@ def cdsapirc_secret() -> str | None:
             if sep:
                 conf[k.strip()] = v.strip()
         url, key = conf.get("url"), conf.get("key")
+    key = (key or "").strip()
+    uid, sep, rest = key.partition(":")
+    if sep and uid.isascii() and uid.isdigit() and rest.strip():
+        key = rest.strip()
     if not key or (url and CDS_HOST not in url):
         return None
     return key
@@ -138,8 +146,11 @@ def list_keys(provider: str | None = None) -> list[ApiKey]:
     out = []
     for n, v in d["keys"].items():
         p = _provider_of(v)
-        out.append(ApiKey(n, v["secret"], v.get("quota", DEFAULT_QUOTA) if get_source(p).has_quota else None,
-                          provider=p))
+        try:
+            has_quota = get_source(p).has_quota
+        except (ValueError, TypeError):  # a provider this version does not know: listed, not usable
+            p, has_quota = "unknown", False
+        out.append(ApiKey(n, v["secret"], v.get("quota", DEFAULT_QUOTA) if has_quota else None, provider=p))
     sec = netrc_secret()
     if sec and NETRC_NAME not in d["keys"]:
         out.append(ApiKey(NETRC_NAME, sec, d.get("netrc_quota", DEFAULT_QUOTA), source="netrc", provider=EDH))

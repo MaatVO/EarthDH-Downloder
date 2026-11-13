@@ -18,7 +18,7 @@ uv run pyinstaller --noconfirm --clean --onefile --name edh-dl \
   --additional-hooks-dir "$PWD/packaging/hooks" --collect-all icechunk --collect-all numcodecs --collect-all zarr \
   --collect-submodules edh_downloader --collect-submodules asyncssh \
   --copy-metadata zarr --copy-metadata xarray --copy-metadata numcodecs --copy-metadata icechunk \
-  --copy-metadata nicegui --exclude-module uvloop --exclude-module watchfiles --add-data "$PWD/packaging/agent.zip:." \
+  --copy-metadata nicegui --add-data "$PWD/src/edh_downloader/gui/search_select.js:edh_downloader/gui" --exclude-module uvloop --exclude-module watchfiles --add-data "$PWD/packaging/agent.zip:." \
   --distpath dist --workpath build --specpath build \
   packaging/entry.py
 ls -lh dist/edh-dl

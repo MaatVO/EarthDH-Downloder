@@ -12,6 +12,7 @@ Pipeline (same design as the original ``edh_daily.py``, generalised):
 """
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -105,6 +106,25 @@ class Engine:
             self.state["updated_at"] = now_iso()
             write_json_atomic(self.state_path, self.state)
 
+    def activity(self, force: bool = False, **kw):
+        """What the job is doing right now (``state["activity"]``: stage, downloads, the unit being processed,
+        the export), for the job card. Parts set to None are dropped. Written at most once a second unless
+        ``force``: progress callbacks may call it per chunk."""
+        if not hasattr(self, "_act_lock"):
+            self._act_lock, self._act, self._act_t = threading.Lock(), {}, 0.0
+        with self._act_lock:
+            for k, v in kw.items():
+                if v is None:
+                    self._act.pop(k, None)
+                else:
+                    self._act[k] = v
+            now = time.time()
+            if not force and now - self._act_t < 1.0:
+                return
+            self._act_t = now
+            snap = json.loads(json.dumps(self._act, default=str))
+        self.save_state(activity=snap)
+
     def control(self) -> dict:
         return read_json(self.dir / "control.json", {}, dict)
 
@@ -116,7 +136,7 @@ class Engine:
     # ---------------------------------------------------------------- run
     def run(self) -> str:
         spec = self.spec
-        self.save_state(status="starting", pid=os.getpid(), started_at=now_iso(), error=None, message="")
+        self.save_state(status="starting", pid=os.getpid(), started_at=now_iso(), error=None, message="", activity={"stage": "planning"})
         signal.signal(signal.SIGTERM, lambda *_: self.request_stop(self.control().get("action", "pause")))
         signal.signal(signal.SIGINT, lambda *_: self.request_stop("pause"))
         try:
@@ -208,10 +228,14 @@ class Engine:
             store.set_attrs(self.repo, store.root_attrs(plan, self.job_id, "complete", extra), "job complete")
         if spec.output.export_zarr:
             self.save_state(status="exporting", message=f"exporting to {spec.zarr_path}")
+            self.activity(force=True, stage="exporting", unit=None, downloads=None,
+                          export={"done": 0, "total": None, "path": str(spec.zarr_path), "since": now_iso()})
             self.log.info(f"exporting to {spec.zarr_path}")
             n = store.export_zarr(self.repo, spec.zarr_path, consolidated=spec.output.consolidated, plan=plan,
                                   memory_gb=spec.download.memory_gb,
-                                  progress=lambda d, t: self.save_state(message=f"exporting {d}/{t}"))
+                                  progress=lambda d, t: self.activity(
+                                      export={"done": d, "total": t, "path": str(spec.zarr_path),
+                                              "since": (self._act.get("export") or {}).get("since")}))
             self.log.info(f"exported {n} objects ({human_bytes(dir_bytes(spec.zarr_path))})")
             self.save_state(exported=True)  # from here on, a crash only has to finish the cleanup
             if not spec.output.keep_icechunk:
@@ -228,9 +252,12 @@ class Engine:
         spool = self.spool_dir()
         if spool.exists():
             shutil.rmtree(spool, ignore_errors=True)
+        if hasattr(self, "_act_lock"):
+            with self._act_lock:
+                self._act = {"stage": "done"}
         outputs = [str(p) for p in (spec.icechunk_path, spec.zarr_path) if p.exists()]
         self.save_state(status="completed", pid=None, finished_at=now_iso(), message="done", outputs=outputs,
-                        output_bytes=sum(dir_bytes(Path(p)) for p in outputs), eta_s=0)
+                        output_bytes=sum(dir_bytes(Path(p)) for p in outputs), eta_s=0, activity={"stage": "done"})
         self.log.info(f"completed: {outputs}")
 
     # ---------------------------------------------------------------- spool

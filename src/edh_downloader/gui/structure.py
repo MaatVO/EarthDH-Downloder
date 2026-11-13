@@ -8,11 +8,21 @@ import numpy as np
 from ..util import human_bytes
 
 SHORT = {"valid_time": "time", "latitude": "lat", "longitude": "lon", "point": "point"}
+SPACE = ("latitude", "longitude", "y", "x", "point")
+LEVEL_UNITS = {"isobaricInhPa": " hPa", "pressure_level": " hPa", "heightAboveGround": " m", "height_level": " m"}
 MAX_LINES = 24  # grid lines drawn per axis; beyond that the grid is drawn sparse and labelled
 
 
+LEVEL_DIMS = {"isobaricInhPa", "pressure_level", "hybrid", "model_level", "heightAboveGround", "height_level",
+              "depthBelowLandLayer", "soil_level", "level"}
+
+
 def _short(d: str) -> str:
-    return SHORT.get(d, "level" if d.startswith("isobaric") else d)
+    if d in SHORT:
+        return SHORT[d]
+    if d in SPACE or not (d in LEVEL_DIMS or d.startswith("isobaric")):
+        return d
+    return "level"
 
 
 def _fmt_num(v) -> str:
@@ -47,9 +57,10 @@ def describe(plan, ratio: float, ratios: dict | None = None) -> dict:
         coords.append(dict(name="valid_time", dims=("valid_time",), shape=(len(lab),), dtype="int64",
                            detail=rng + (f" · {_step(plan)}" if step is not None else "")))
     if plan.has_levels:
-        lv = plan.level_values
-        coords.append(dict(name=plan.ds.meta.level_dim, dims=(plan.ds.meta.level_dim,), shape=(len(lv),),
-                           dtype="int64", detail=", ".join(_fmt_num(v) for v in lv) + " hPa"))
+        lv, ld = plan.level_values, plan.ds.meta.level_dim
+        coords.append(dict(name=ld, dims=(ld,), shape=(len(lv),), dtype="int64",
+                           detail=", ".join(_fmt_num(v) for v in lv[:12]) + (" …" if len(lv) > 12 else "")
+                           + LEVEL_UNITS.get(ld, "")))
     if plan.points is not None:
         n = len(plan.points)
         coords.append(dict(name="point", dims=("point",), shape=(n,), dtype="int32", detail="0 … " + str(n - 1)))
@@ -59,6 +70,16 @@ def describe(plan, ratio: float, ratios: dict | None = None) -> dict:
         coords.append(dict(name="longitude", dims=("point",), shape=(n,), dtype="float64", detail="nearest cell"))
         coords.append(dict(name="requested_latitude", dims=("point",), shape=(n,), dtype="float64", detail="as given"))
         coords.append(dict(name="requested_longitude", dims=("point",), shape=(n,), dtype="float64", detail="as given"))
+    elif getattr(plan, "curvilinear", False):  # projected grid: index axes y, x and 2-D latitude/longitude
+        ny, nx = plan.shape_space
+        coords.append(dict(name="y", dims=("y",), shape=(ny,), dtype="int32", detail="row of the source grid"))
+        coords.append(dict(name="x", dims=("x",), shape=(nx,), dtype="int32", detail="column of the source grid"))
+        for nm, v in (("latitude", plan.out_lat), ("longitude", plan.out_lon)):
+            v = np.asarray(v)
+            known = bool(v.size) and bool(np.any(v))
+            coords.append(dict(name=nm, dims=("y", "x"), shape=v.shape, dtype="float64",
+                               detail=f"{_fmt_num(np.nanmin(v))}° … {_fmt_num(np.nanmax(v))}°" if known
+                               else "read from the first file"))
     else:
         for nm, v in (("latitude", plan.out_lat), ("longitude", plan.out_lon)):
             v = np.asarray(v)
@@ -89,6 +110,11 @@ def describe(plan, ratio: float, ratios: dict | None = None) -> dict:
 
 def _step(plan) -> str:
     t = plan.spec.time
+    lab = plan.labels
+    if t.freq == "none" and len(lab) > 1:  # as stored: the source's own step (CERRA 3-hourly, monthly means)
+        h = (lab[1] - lab[0]).total_seconds() / 3600
+        return ("hourly" if h == 1 else "daily" if h == 24 else f"{h:g}-hourly" if h < 24 else
+                "monthly" if 28 * 24 <= h <= 31 * 24 else "yearly" if h >= 365 * 24 else f"every {h / 24:g} days")
     return {"none": "hourly", "hours": f"{t.hours}-hourly", "day": "daily", "month": "monthly",
             "year": "yearly"}.get(t.freq, t.freq)
 
@@ -99,12 +125,12 @@ def tree_html(d: dict, max_vars: int | None = None) -> str:
     """The store as a tree. With ``max_vars`` only that many data variables are listed, plus a "… N more" row."""
     e = html.escape
     rows = [f'<div class="st-root"><span class="material-icons st-ic">folder</span>{e(d["name"])}'
-            f'<span class="st-type">{d.get("format", "Zarr v3")}</span></div>']
+            f'<span class="st-type">{e(d.get("format", "Zarr v3"))}</span></div>']
 
     def item(br, cont, icon, cls, name, dims, dtype, detail):
         rows.append(f'<div class="st-row"><span class="st-br">{br}</span><span class="material-icons st-ic {cls}">'
-                    f'{icon}</span><b>{e(name)}</b>' + (f'<span class="st-dims">{dims}</span>' if dims else "") +
-                    (f'<span class="st-type">{dtype}</span>' if dtype else "") + '</div>')
+                    f'{icon}</span><b>{e(name)}</b>' + (f'<span class="st-dims">{e(dims)}</span>' if dims else "") +
+                    (f'<span class="st-type">{e(dtype)}</span>' if dtype else "") + '</div>')
         if detail:
             rows.append(f'<div class="st-row st-sub"><span class="st-br">{cont}</span><span class="st-detail">{detail}</span></div>')
 
@@ -173,10 +199,11 @@ def cube_svg(v: dict) -> str:
     ch = dict(zip(dims, chunks))
     sh = dict(zip(dims, shards)) if shards else {}
     has_t = "valid_time" in size
-    lev = next((d for d in dims if d.startswith("isobaric")), None)
+    lev = next((d for d in dims if d != "valid_time" and d not in SPACE), None)
     if "point" in size:
         return _rect_svg(v, size, ch, sh)
-    ny, nx = size["latitude"], size["longitude"]
+    la, lo = ("y", "x") if "y" in size else ("latitude", "longitude")
+    ny, nx = size[la], size[lo]
     asp = nx / ny
     W = 190 if asp >= 1 else max(60, 190 * asp)
     H = 190 / asp if asp >= 1 else 190
@@ -209,10 +236,10 @@ def cube_svg(v: dict) -> str:
         poly([P(W, 0, 0), P(W, H, 0), P(W, H, 1), P(W, 0, 1)], fill="#1c263b", **face)  # right
     poly([P(0, 0, 0), P(W, 0, 0), P(W, H, 0), P(0, H, 0)], fill="#222d45", **face)  # front
 
-    xs, fx, kx = _axis(nx, ch["longitude"], W)
-    ys, fy, ky = _axis(ny, ch["latitude"], H)
-    shx = _axis(nx, sh["longitude"], W)[0] if sh and math.ceil(nx / sh["longitude"]) <= MAX_LINES else []
-    shy = _axis(ny, sh["latitude"], H)[0] if sh and math.ceil(ny / sh["latitude"]) <= MAX_LINES else []
+    xs, fx, kx = _axis(nx, ch[lo], W)
+    ys, fy, ky = _axis(ny, ch[la], H)
+    shx = _axis(nx, sh[lo], W)[0] if sh and math.ceil(nx / sh[lo]) <= MAX_LINES else []
+    shy = _axis(ny, sh[la], H)[0] if sh and math.ceil(ny / sh[la]) <= MAX_LINES else []
     for x in xs:
         ln(P(x, 0, 0), P(x, H, 0))
         if has_t:
@@ -258,12 +285,12 @@ def cube_svg(v: dict) -> str:
     mut = "#97a3b8"
     # axis labels: size and chunks along each axis
     bx, by = P(W / 2, H, 0)
-    text(bx, by + 20, f"longitude {nx:,}", weight="500")
-    text(bx, by + 35, _per(kx, ch['longitude']), color=mut, size_=12)
+    text(bx, by + 20, f"{lo} {nx:,}", weight="500")
+    text(bx, by + 35, _per(kx, ch[lo]), color=mut, size_=12)
     lx, lyy = P(0, H / 2, 0)
     out.append(f'<g transform="translate({lx - 14:.1f},{lyy:.1f}) rotate(-90)">')
-    out.append(f'<text text-anchor="middle" fill="#e9edf5" font-weight="500">latitude {ny:,}</text>')
-    out.append(f'<text y="-16" text-anchor="middle" fill="{mut}" font-size="12">{_per(ky, ch["latitude"])}</text></g>')
+    out.append(f'<text text-anchor="middle" fill="#e9edf5" font-weight="500">{la} {ny:,}</text>')
+    out.append(f'<text y="-16" text-anchor="middle" fill="{mut}" font-size="12">{_per(ky, ch[la])}</text></g>')
     if has_t:
         tx, ty = P(W, H, 0.5)
         text(tx + 12, ty + 4, f"time {size['valid_time']:,}", anchor="start", weight="500")
@@ -376,7 +403,8 @@ def from_store(path) -> dict:
     coords, data, codecs = [], [], ""
     for name, a in sorted(arrays.items()):
         dims = tuple(a.metadata.dimension_names or ())
-        is_coord = name in dimnames or (len(dims) == 1 and dims[0] == "point")
+        is_coord = name in dimnames or (len(dims) == 1 and dims[0] == "point") or \
+            (name in ("latitude", "longitude") and dims == ("y", "x"))  # projected grid
         if is_coord:
             coords.append(dict(name=name, dims=dims, shape=a.shape, dtype=str(a.dtype), detail=_coord_detail(ds, name)))
             continue
@@ -396,7 +424,7 @@ def from_store(path) -> dict:
             n_files=files if files is not None else (math.prod(math.ceil(s / c) for s, c in zip(a.shape, a.shards))
                                                      if a.shards else n_chunks),
             raw=raw, disk=disk))
-    order = {"valid_time": 0, "latitude": 2, "longitude": 3, "point": 1}
+    order = {"valid_time": 0, "latitude": 2, "longitude": 3, "point": 1, "y": 2, "x": 3}
     coords.sort(key=lambda c: (order.get(c["name"], 1 if c["name"].startswith("isobaric") else 5), c["name"]))
     total_disk, total_files = _du(path)
     return dict(name=path.name, coords=coords, data=data, attrs=list(g.attrs.keys()), codecs=codecs,
@@ -409,7 +437,7 @@ def _coord_detail(ds, name) -> str:
         v = ds[name].values
     except Exception:
         return ""
-    if not len(v):
+    if v.ndim == 0 or not v.size:  # an empty coordinate: nothing to describe (and nanmin would fail)
         return ""
     if np.issubdtype(v.dtype, np.datetime64):
         import pandas as pd
@@ -423,6 +451,10 @@ def _coord_detail(ds, name) -> str:
         return f"{t[0]:%Y-%m-%d %H:%M} … {t[-1]:%Y-%m-%d %H:%M}{step}"
     if name.startswith("isobaric"):
         return ", ".join(_fmt_num(x) for x in v[:12]) + (" …" if len(v) > 12 else "") + " hPa"
+    if v.ndim > 1:
+        if v.dtype.kind != "f" or not np.isfinite(v).any():
+            return ""
+        return f"{_fmt_num(np.nanmin(v))}° … {_fmt_num(np.nanmax(v))}°"
     if v.dtype.kind == "f" and name in ("latitude", "longitude") and ds[name].dims == (name,):
         res = abs(float(v[1] - v[0])) if len(v) > 1 else None
         return f"{_fmt_num(v[0])}° … {_fmt_num(v[-1])}°" + (f" · {_fmt_num(res)}°" if res else "")

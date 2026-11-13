@@ -19,8 +19,11 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import random
+import re
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 
@@ -31,6 +34,129 @@ FINAL = {"successful", "failed", "rejected", "dismissed"}
 # words CDS uses when it refuses more work from a user for a while (seen as job failures, or HTTP errors)
 THROTTLE_HINTS = ("temporarily limited", "too many", "rate limit", "try again later")
 ORDERED_FIELDS = {"area", "grid", "location"}  # positional values: never sorted
+
+
+MAX_REDIRECTS = 5
+REDIRECTS = (301, 302, 303, 307, 308)
+
+
+def origin_of(url: str) -> tuple:
+    """(scheme, host, port) of a URL: what decides whether a token may be sent to it."""
+    p = urlsplit(url)
+    scheme = p.scheme.lower()
+    try:
+        port = p.port
+    except ValueError:
+        port = None
+    return scheme, (p.hostname or "").lower(), port or {"http": 80, "https": 443}.get(scheme)
+
+
+def same_origin(a: str, b: str) -> bool:
+    return origin_of(a) == origin_of(b)
+
+
+def _retry_after(value) -> float | None:
+    """A ``Retry-After`` header in seconds (CDS does not send HTTP dates); None when absent or unreadable."""
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, x) if math.isfinite(x) else None
+
+
+def expected_md5(checksum) -> str | None:
+    """The MD5 of a ``file:checksum`` value: ``md5:<hex>`` or 32 hex digits. Another format gives None (not checked)."""
+    if not isinstance(checksum, str):
+        return None
+    c = checksum.strip().lower()
+    if c.startswith("md5:"):
+        c = c[4:].strip()
+    return c if re.fullmatch(r"[0-9a-f]{32}", c) else None
+
+
+MIB = 1 << 20
+# part sizes object-store clients use for multipart uploads (MiB), tried when the part count does not settle it
+PART_MIB = (5, 8, 10, 15, 16, 25, 32, 50, 64, 100, 128, 256, 512, 1024)
+
+
+def _part_sizes(size: int, parts: int | None) -> list[int]:
+    """Multipart part sizes (bytes) that give ``parts`` parts for a file of ``size`` bytes (all the usual ones
+    when the count is unknown), and the smallest whole MiB that does."""
+    if parts is None:
+        return [m * MIB for m in PART_MIB]
+    out = [m * MIB for m in PART_MIB if math.ceil(size / (m * MIB)) == parts]
+    if parts > 0:
+        smallest = math.ceil(size / parts / MIB) * MIB
+        if math.ceil(size / smallest) == parts and smallest not in out:
+            out.append(smallest)
+    return out
+
+
+def file_digests(path: Path, part_sizes: list[int]) -> tuple[str, dict[int, str]]:
+    """The MD5 of a file and, for each part size, its multipart MD5 (the MD5 of the parts' MD5s, as an object
+    store computes the ETag of a multipart upload), in one read. Part sizes must be multiples of 1 MiB."""
+    whole = hashlib.md5(usedforsecurity=False)
+    parts = {ps: [] for ps in part_sizes}
+    cur = {ps: hashlib.md5(usedforsecurity=False) for ps in part_sizes}
+    pos = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(MIB), b""):
+            whole.update(chunk)
+            pos += len(chunk)
+            for ps in part_sizes:
+                cur[ps].update(chunk)
+                if pos % ps == 0:
+                    parts[ps].append(cur[ps].digest())
+                    cur[ps] = hashlib.md5(usedforsecurity=False)
+    out = {}
+    for ps in part_sizes:
+        if pos % ps or not parts[ps]:
+            parts[ps].append(cur[ps].digest())
+        out[ps] = hashlib.md5(b"".join(parts[ps]), usedforsecurity=False).hexdigest()
+    return whole.hexdigest(), out
+
+
+def checksum_matches(path: Path, want: str, etag: str | None = None) -> bool:
+    """Whether a downloaded file is the one CDS published. Its ``file:checksum`` is the object store's ETag
+    without the ``-<parts>`` suffix: the plain MD5 for a file uploaded in one part, the multipart MD5 for a large
+    one (seen on a 1.5 GB ERA5 result: ``<md5 of 30 part MD5s>-30``). The ETag of the download, when it carries
+    the same hash, tells the number of parts."""
+    parts = None
+    m = re.fullmatch(r'(?:w/)?"?([0-9a-f]{32})(?:-(\d+))?"?', (etag or "").strip().lower())
+    if m and m.group(1) == want:
+        if not m.group(2):
+            parts = 1
+        else:
+            parts = int(m.group(2))
+    size = Path(path).stat().st_size
+    whole, multi = file_digests(path, [] if parts == 1 else _part_sizes(size, parts))
+    return want == whole or want in multi.values()
+
+
+def _range_start(content_range: str | None) -> int | None:
+    m = re.match(r"\s*bytes\s+(\d+)-", content_range or "")
+    return int(m.group(1)) if m else None
+
+
+async def send(session, method: str, url: str, api: str, token: str | None, body=None) -> tuple[int, str, str | None]:
+    """One request. Redirects are followed by hand (at most MAX_REDIRECTS): the token is sent only to URLs on the
+    API's origin, so a redirect to another host never receives it. Returns (status, body text, Retry-After)."""
+    hops = 0
+    while True:
+        headers = {"Accept": "application/json"}
+        if token is not None and same_origin(url, api):
+            headers["PRIVATE-TOKEN"] = token
+        async with session.request(method, url, json=body, headers=headers, allow_redirects=False) as r:
+            location = r.headers.get("Location")
+            if r.status in REDIRECTS and location:
+                hops += 1
+                if hops > MAX_REDIRECTS:
+                    raise CDSError(f"too many redirects from the Climate Data Store (HTTP {r.status})", r.status)
+                url = urljoin(url, location)
+                if r.status in (301, 302, 303) and method == "POST":
+                    method, body = "GET", None
+                continue
+            return r.status, await r.text(), r.headers.get("Retry-After")
 
 
 class CDSError(Exception):
@@ -125,6 +251,8 @@ class CDSClient:
 
         self.token = token
         self.api = (api or default_api()).rstrip("/")
+        sp = urlsplit(self.api)
+        self.origin = f"{sp.scheme}://{sp.netloc}"
         self.timeout = timeout
         self.retries = retries
         self.backoff = backoff
@@ -144,36 +272,44 @@ class CDSClient:
 
     def _wait(self, attempt: int, retry_after: float | None = None) -> float:
         if retry_after is not None:
-            return min(self.max_backoff, max(0.0, retry_after))
+            return min(self.max_backoff, max(1.0, retry_after))  # Retry-After: 0 still waits a second
         return min(self.max_backoff, self.backoff * 2 ** attempt) * (0.5 + random.random() / 2)
 
+    def _absolute(self, href: str) -> str:
+        """The URL for a path or a link. ``http(s)://`` is used as it is, ``/api/...`` is relative to the origin
+        (as links from CDS are), other paths are relative to the API base (``/retrieve/v1/...``)."""
+        if href.startswith(("http://", "https://")):
+            return href
+        if href.startswith("/api/"):
+            return urljoin(self.origin, href)
+        if href.startswith("/"):
+            return self.api + href
+        return urljoin(self.api + "/", href)
+
     async def _call(self, method: str, path: str, body=None, auth: bool = True, submitting: bool = False):
-        url = path if path.startswith("http") else f"{self.api}{path}"
-        headers = {"Accept": "application/json"}
-        if auth:
-            headers["PRIVATE-TOKEN"] = self.token
+        url = self._absolute(path)
+        token = self.token if auth else None
         for attempt in range(self.retries + 1):
             self.calls += 1
             try:
-                async with self.session.request(method, url, json=body, headers=headers) as r:
-                    text = await r.text()
-                    try:
-                        data = json.loads(text) if text else {}
-                    except ValueError:
-                        data = text
-                    status = r.status
-                    retry_after = r.headers.get("Retry-After")
+                status, text, retry_after_hdr = await send(self.session, method, url, self.api, token, body)
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt >= self.retries:
                     raise CDSError(f"could not reach the Climate Data Store: {type(e).__name__}: {e}") from e
                 await asyncio.sleep(self._wait(attempt))
                 continue
+            try:
+                data, is_json = (json.loads(text) if text else {}), True
+            except ValueError:
+                data, is_json = text, False
             if status < 400:
+                if not is_json:
+                    raise CDSError("unexpected response from the CDS (not JSON)", status)
                 return status, data
             msg = _message(data)
             if status in (401, 403):
                 raise AuthError(f"the Climate Data Store refused the token (HTTP {status}): {msg}", status)
-            ra = float(retry_after) if retry_after and retry_after.replace(".", "", 1).isdigit() else None
+            ra = _retry_after(retry_after_hdr)
             if status == 429 or (status == 503 and is_throttle(msg)) or (submitting and is_throttle(msg)):
                 # a refused submission goes straight back: the request queue decides when to try again
                 if submitting or attempt >= self.retries:
@@ -235,7 +371,7 @@ class CDSClient:
             nxt = next((l["href"] for l in d.get("links", []) if l.get("rel") == "next"), None)
             if not page or not nxt or len(page) < limit:
                 break
-            url = nxt
+            url = self._absolute(nxt)
         return out
 
     async def statuses(self, job_ids: list[str], limit: int = 100) -> dict[str, dict]:
@@ -255,7 +391,7 @@ class CDSClient:
             nxt = next((l["href"] for l in d.get("links", []) if l.get("rel") == "next"), None)
             if len(found) == len(want) or not page or not nxt or len(page) < limit:
                 break
-            url = nxt
+            url = self._absolute(nxt)
         for jid in want - set(found):
             try:
                 found[jid] = await self.job(jid)
@@ -291,43 +427,64 @@ class CDSClient:
 
     # ------------------------------------------------------------ download
     async def download(self, href: str, dest: Path, size: int | None = None, progress=None,
-                       block: int = 1 << 20) -> int:
-        """Fetch a result file to ``dest``. A partial ``dest.part`` from an interrupted run is continued with an
-        HTTP Range request; the size is checked against the one CDS announced. The token is not sent."""
+                       block: int = 1 << 20, checksum: str | None = None) -> int:
+        """Fetch a result file to ``dest``.
+
+        A partial ``dest.part`` from an interrupted run is continued with an HTTP Range request, but only when the
+        server answers with a range that starts where the file stops; otherwise the file is fetched from the start.
+        Connection errors, 5xx and 429 are retried with backoff (``Retry-After`` honoured). The size is checked
+        against the one CDS announced; ``checksum`` (CDS's ``file:checksum``: ``md5:<hex>`` or 32 hex digits; any
+        other format is not checked) is verified too. A file that fails a check is deleted and CDSError is raised.
+        The token is not sent."""
         dest = Path(dest)
         part = dest.with_name(dest.name + ".part")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        for attempt in range(self.retries + 1):
+        failures = 0
+        etag = None
+        while True:
             have = part.stat().st_size if part.exists() else 0
             if size is not None and have > size:
                 part.unlink()
                 have = 0
+            if size is not None and have == size:
+                break
             headers = {"Range": f"bytes={have}-"} if have else {}
+            ra, err = None, None
             try:
-                if size is not None and have == size:
-                    break
                 async with self.session.get(href, headers=headers,
                                             timeout=aiohttp.ClientTimeout(total=None, sock_read=300)) as r:
-                    if r.status == 416 and size is not None and have == size:
-                        break
-                    if r.status not in (200, 206):
-                        if r.status in (403, 404):
-                            raise ResultsExpired(f"result file is gone (HTTP {r.status})", r.status)
+                    if r.status in (403, 404):
+                        raise ResultsExpired(f"result file is gone (HTTP {r.status})", r.status)
+                    if r.status == 429 or r.status >= 500:
+                        ra, err = _retry_after(r.headers.get("Retry-After")), f"download failed (HTTP {r.status})"
+                    elif r.status not in (200, 206):
                         raise CDSError(f"download failed (HTTP {r.status})", r.status)
-                    mode = "ab" if r.status == 206 else "wb"
-                    with open(part, mode) as f:
-                        async for chunk in r.content.iter_chunked(block):
-                            f.write(chunk)
-                            if progress:
-                                progress(len(chunk))
-                break
+                    elif r.status == 206 and have and _range_start(r.headers.get("Content-Range")) != have:
+                        # not the range that continues this file: start again (the next pass asks for all of it)
+                        part.unlink(missing_ok=True)
+                        continue
+                    else:
+                        etag = r.headers.get("ETag") or etag
+                        mode = "ab" if r.status == 206 else "wb"
+                        with open(part, mode) as f:
+                            async for chunk in r.content.iter_chunked(block):
+                                f.write(chunk)
+                                if progress:
+                                    progress(len(chunk))
+                        break
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                if attempt >= self.retries:
-                    raise CDSError(f"download failed: {type(e).__name__}: {e}") from e
-                await asyncio.sleep(self._wait(attempt))
+                err = f"download failed: {type(e).__name__}: {e}"
+            failures += 1
+            if failures > self.retries:
+                raise CDSError(err or "download failed")
+            await asyncio.sleep(self._wait(failures - 1, ra))
         got = part.stat().st_size
         if size is not None and got != size:
             part.unlink(missing_ok=True)
             raise CDSError(f"download incomplete: {got} of {size} bytes")
+        want = expected_md5(checksum)
+        if want is not None and not await asyncio.to_thread(checksum_matches, part, want, etag):
+            part.unlink(missing_ok=True)
+            raise CDSError("checksum mismatch: the downloaded file is not the one CDS published")
         part.replace(dest)
         return got

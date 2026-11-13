@@ -71,10 +71,19 @@ def test_pressure_levels_split_by_variable_when_a_month_is_too_big(cds):
     assert all(r.fields <= 60000 for r in p.requests)
 
 
-def test_partial_months_are_requested_alone(cds):
+def test_partial_months_are_asked_whole_when_that_saves_requests(cds):
     p = plan(spec(start="2020-01-15", end="2020-03-10"))
+    assert len(p.requests) == 1 and p.rounded  # one queue slot instead of three, for 26 more days of data
+    r = p.requests[0]
+    assert r.inputs["month"] == ["01", "02", "03"] and len(r.inputs["day"]) == 31
+    assert r.fields == (31 + 29 + 31) * 24 * 5
+    assert p.summary()["first"] == "2020-01-15 00:00:00"  # the job's own period is unchanged
+
+
+def test_partial_months_stay_exact_when_rounding_saves_nothing(cds):
+    p = plan(spec(start="2020-01-15", end="2020-03-10"), limit=24 * 31 * 5)  # one month per request at most
     got = [(r.inputs["month"], r.inputs["day"][0], r.inputs["day"][-1]) for r in p.requests]
-    assert got == [(["01"], "15", "31"), (["02"], "01", "29"), (["03"], "01", "10")]
+    assert got == [(["01"], "15", "31"), (["02"], "01", "29"), (["03"], "01", "10")] and not p.rounded
 
 
 def test_only_the_needed_hours(cds):
@@ -108,7 +117,10 @@ def test_size_limit_splits_big_global_requests(cds):
     p = plan(spec(area=AreaSpec(mode="global")))  # 0.25°: ~2 MB per field
     assert "area" not in p.requests[0].inputs
     assert all(r.bytes_est <= 10e9 for r in p.requests)
-    assert len(p.requests) == 12  # one month (3 720 fields, ~7.7 GB) per request
+    # all five variables: one month (3 720 fields, ~7.7 GB) per request, 12 requests; split in groups of three
+    # and two variables, two and three months fit: 6 + 4 requests
+    assert len(p.requests) == 10
+    assert sorted({len(r.inputs["variable"]) for r in p.requests}) == [2, 3]
     assert p.summary()["download_bytes_est"] == sum(r.bytes_est for r in p.requests)
 
 
@@ -232,3 +244,75 @@ def test_service_plan_suggests_time_series_for_points(cds):
 
     s = spec(end="2020-01-31", area=AreaSpec(mode="points", points=[Point("a", 45.1, 11.2)]))
     assert service.plan(s.to_dict(), 8, True)["alternative"]["dataset"] == ERA + "-timeseries"
+
+
+# ------------------------------------------------------------------ the form: options that apply
+
+def test_only_the_options_that_apply_are_shown(cds):
+    from edh_downloader import service
+
+    def names(sel):
+        r = service.cds_options(CERRA, sel)
+        return {o["name"]: o["values"] for o in r["options"]}, r["dropped"]
+
+    shown, _ = names({"variable": ["2m_temperature"]})
+    assert "leadtime_hour" in shown and "soil_layer" not in shown  # soil layers only for soil fields
+    shown, dropped = names({"variable": ["2m_temperature"], "product_type": "analysis", "leadtime_hour": ["1"]})
+    assert "leadtime_hour" not in shown and dropped == ["leadtime_hour"]  # a lead time is for forecasts only
+    shown, _ = names({"variable": ["total_precipitation"]})
+    assert shown["product_type"] == ["forecast"]  # precipitation is never an analysis
+    era = service.cds_options(ERA, {"variable": ["2m_temperature"]})["options"]
+    assert [o["name"] for o in era] == ["product_type"]
+
+
+def test_an_option_chosen_for_another_kind_of_request_is_not_sent(cds):
+    p = plan(spec(dataset=CERRA, variables=["2m_temperature"], end="2020-01-31",
+                  options={"level_type": "surface_or_atmosphere", "data_type": ["reanalysis"],
+                           "product_type": "analysis", "leadtime_hour": ["1"]}), limit=90000)
+    assert "leadtime_hour" not in p.requests[0].inputs
+
+
+# ------------------------------------------------------------------ the store, before any download
+
+def test_the_store_is_previewed_from_the_plan(cds):
+    from edh_downloader import service
+
+    s = spec(variables=["2m_temperature", "total_precipitation"], time={"freq": "day"})
+    r = service.plan(s.to_dict(), 8, True)
+    st = r["struct"]
+    assert r["rec"] and r["layout"] == r["rec"][0] and r["rows"]
+    coords = {c["name"]: c for c in st["coords"]}
+    assert coords["latitude"]["shape"] == (9,) and coords["longitude"]["shape"] == (9,)  # 47..45, 10..12 at 0.25°
+    assert coords["valid_time"]["shape"] == (366,)
+    data = {v["name"]: v for v in st["data"]}
+    assert data["total_precipitation"]["stat"] == "sum" and data["2m_temperature"]["stat"] == "mean"
+    assert any("GRIB" in n for n in st["notes"])  # names from the form until a file is read
+
+
+def test_cerra_preview_shows_the_whole_projected_domain(cds):
+    from edh_downloader import service
+
+    s = spec(dataset=CERRA, variables=["2m_temperature"], end="2020-01-31",
+             options={"level_type": "surface_or_atmosphere", "data_type": ["reanalysis"], "product_type": "analysis"})
+    st = service.plan(s.to_dict(), 8, True)["struct"]
+    v = st["data"][0]
+    assert v["dims"] == ("valid_time", "y", "x") and v["shape"] == (31 * 8, 1069, 1069)
+    assert any("projected" in n for n in st["notes"])
+    from edh_downloader.gui import structure
+    assert "<svg" in structure.cube_svg(v) and "y 1,069" in structure.cube_svg(v)
+
+
+def test_preview_uses_what_an_earlier_job_learned(cds):
+    import numpy as np
+
+    from edh_downloader.sources.cds.grib import Grid
+    from edh_downloader.sources.cds.output import CdsOutput
+
+    s = spec(variables=["2m_temperature"], end="2020-01-31")
+    p = plan(s)
+    lat, lon = np.arange(47, 44.9, -0.25), np.arange(10, 12.1, 0.25)
+    out = CdsOutput(p, Grid("regular", lat, lon), [])
+    out.remember([{"param": 167, "name": "t2m", "short_name": "2t", "long_name": "2 metre temperature",
+                   "units": "K", "step_type": "instant", "level_type": "surface", "form_name": "2m_temperature"}])
+    prev = CdsOutput.preview(p)
+    assert [vp.out_names[0] for vp in prev.vars] == ["t2m"] and prev.exact

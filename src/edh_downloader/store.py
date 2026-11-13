@@ -116,8 +116,9 @@ def _write_layout(g: zarr.Group, plan: Plan) -> None:
     if plan.has_levels:
         lv = np.asarray(plan.level_values)
         name = plan.ds.meta.level_dim
-        level_attrs = {"units": "hPa", "long_name": "pressure level", "positive": "down"} \
-            if name == "isobaricInhPa" else {"long_name": name}
+        level_attrs = getattr(plan, "level_attrs", None) or (
+            {"units": "hPa", "long_name": "pressure level", "positive": "down"} if name == "isobaricInhPa"
+            else {"long_name": name})
         a = g.create_array(name, shape=lv.shape, dtype=lv.dtype, chunks=lv.shape, dimension_names=[name],
                            attributes=level_attrs, fill_value=0)
         a[:] = lv

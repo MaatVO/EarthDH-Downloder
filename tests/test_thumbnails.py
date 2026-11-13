@@ -68,3 +68,11 @@ def test_option_template_cannot_be_broken_out_of():
     template = option_template([hostile, None])
     assert "<script>" not in template
     assert html.escape(json.dumps([hostile, None])) in template
+
+
+def test_datasets_are_found_by_their_keyword_values():
+    from edh_downloader.gui.app import search_text
+
+    item = {"keywords": ["Product type: Reanalysis", "Variable domain: Land (hydrology)", "Europe"]}
+    assert search_text(item) == "Reanalysis Land (hydrology) Europe"
+    assert search_text({}) == ""

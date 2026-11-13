@@ -24,9 +24,12 @@ from .util import read_json, write_json_atomic
 STATE_DIR = "~/.local/share/edh-dl"  # on the server: venv-<deps id>/ and agent/<build>.zip
 DEPS = ["aiohttp>=3.9", "icechunk>=2", "numcodecs>=0.15", "numpy>=2", "pandas>=2.2", "xarray>=2024.10", "zarr>=3"]
 PROBE = "import aiohttp, icechunk, numcodecs, numpy, pandas, xarray, zarr"
-# GRIB decoding for Climate Data Store jobs. Optional: its binary wheels need glibc 2.28+ (macOS 15+), and a server
-# without it must still run Earth Data Hub jobs, so it is installed when possible and never part of the PROBE.
-OPTIONAL_DEPS = ["eccodes>=2.40", "eccodeslib>=2.50.0.34; sys_platform != 'win32'"]
+# GRIB and NetCDF decoding for Climate Data Store jobs. Optional: their binary wheels need glibc 2.28+ (macOS 15+),
+# and a server without them must still run Earth Data Hub jobs, so each is installed when possible (one failing does
+# not stop the other) and never part of the PROBE.
+OPTIONAL = {"GRIB": ["eccodes>=2.40", "eccodeslib>=2.50.0.34; sys_platform != 'win32'"],
+            "NetCDF": ["netCDF4>=1.7"]}
+OPTIONAL_DEPS = [d for group in OPTIONAL.values() for d in group]
 # Jobs keep running with the code (agent/<build>.zip) and the environment that started them. So nothing a newer app
 # version installs may touch them: each build has its own zip, each dependency set its own venv, and an existing
 # environment is never rebuilt in place (``--clear`` would pull the packages from under a running download).
@@ -197,41 +200,61 @@ async def _env_ok(conn, py: str) -> bool:
     return rc == 0
 
 
-async def setup(conn, log=lambda m: None) -> None:
+async def capabilities(conn, py: str) -> dict:
+    """What the server's environment can do beyond the required packages, by importing them. Nothing here is needed
+    to run the app: a missing capability only stops the jobs that need it (GRIB conversion needs ``eccodes``,
+    NetCDF conversion ``netCDF4``)."""
+    out = {}
+    for cap, module in (("grib", "eccodes"), ("netcdf", "netCDF4")):
+        rc, _ = await _sh(conn, f"{shlex.quote(py)} -c 'import {module}' 2>/dev/null")
+        out[cap] = rc == 0
+    return out
+
+
+async def setup(conn, log=lambda m: None) -> dict:
     """Create ``<state>/venv-<deps id>`` on the server and install the packages (uv when there, else python3 -m
-    venv). A new directory: environments that running jobs use are left alone."""
+    venv). A new directory: environments that running jobs use are left alone. An environment whose python exists
+    is not cleared (it may be in use): only the packages are installed into it. Returns ``capabilities``."""
     home = await _home(conn)
     state = STATE_DIR.replace("~", home, 1)
     venv = venv_dir(state)
+    py = f"{venv}/bin/python"
     deps = " ".join(shlex.quote(d) for d in DEPS)
     await _sh(conn, f"mkdir -p {shlex.quote(state)}", check=True)
+    exists = (await _sh(conn, f"test -x {shlex.quote(py)}"))[0] == 0
     rc, _ = await _sh(conn, "command -v uv >/dev/null 2>&1")
-    if rc == 0:
-        log("creating the environment with uv …")
-        steps = [f"uv venv --python 3.12 --clear {shlex.quote(venv)}",
-                 f"uv pip install --python {shlex.quote(venv)}/bin/python {deps}"]
+    uv = rc == 0
+    if uv:
+        log("creating the environment with uv …" if not exists else "updating the packages with uv …")
+        create = f"uv venv --python 3.12 --clear {shlex.quote(venv)}"
+        install = f"uv pip install --python {shlex.quote(py)} {deps}"
     else:
         rc, out = await _sh(conn, "python3 -c 'import sys; print(int(sys.version_info >= (3, 12)))' 2>/dev/null")
-        if out.strip() != "1":
+        if not exists and out.strip() != "1":
             raise SetupFailed("the server needs Python 3.12 or newer, or `uv` (https://docs.astral.sh/uv/): "
                               "install one of them and connect again")
-        log("creating the environment with python3 …")
-        steps = [f"python3 -m venv --clear {shlex.quote(venv)}",
-                 f"{shlex.quote(venv)}/bin/python -m pip install --quiet {deps}"]
+        log("creating the environment with python3 …" if not exists else "updating the packages with pip …")
+        create = f"python3 -m venv --clear {shlex.quote(venv)}"
+        install = f"{shlex.quote(py)} -m pip install --quiet {deps}"
+    steps = [install] if exists else [create, install]
     for step in steps:
         rc, out = await _run(conn, step, log)
         if rc:
             raise SetupFailed(f"setup failed on the server:\n{out[-1500:]}")
-    opt = " ".join(shlex.quote(d) for d in OPTIONAL_DEPS)
-    step = (f"uv pip install --python {shlex.quote(venv)}/bin/python {opt}" if steps[0].startswith("uv ") else
-            f"{shlex.quote(venv)}/bin/python -m pip install --quiet {opt}")
-    log("adding GRIB support (Climate Data Store) …")
-    rc, out = await _run(conn, step, log)
-    if rc:
-        log("GRIB support could not be installed on this server: Climate Data Store jobs that convert GRIB will "
-            "not run here (Earth Data Hub jobs are not affected)")
-    if not await _env_ok(conn, f"{venv}/bin/python"):
+    for what, group in OPTIONAL.items():
+        if not group:
+            continue
+        opt = " ".join(shlex.quote(d) for d in group)
+        step = (f"uv pip install --python {shlex.quote(py)} {opt}" if uv else
+                f"{shlex.quote(py)} -m pip install --quiet {opt}")
+        log(f"adding {what} support (Climate Data Store) …")
+        rc, out = await _run(conn, step, log)
+        if rc:
+            log(f"{what} support could not be installed on this server: Climate Data Store jobs that convert "
+                f"{what} will not run here (Earth Data Hub jobs are not affected)")
+    if not await _env_ok(conn, py):
         raise SetupFailed("the packages were installed but cannot be imported on the server")
+    return await capabilities(conn, py)
 
 
 async def _python(conn, state: str) -> str | None:

@@ -28,6 +28,10 @@ FORMAT_FIELDS = ("data_format", "format")
 OWN_FIELDS = {"variable", *LEVEL_FIELDS, *TIME_FIELDS, "date", "area", "location", "licences",
               *FORMAT_FIELDS, "download_format"}
 PRODUCT_TYPE = "Product type: "
+# widget types the app fills or shows: options, groups, notes, and the controls for the fields in OWN_FIELDS
+HANDLED_TYPES = {"StringListWidget", "StringChoiceWidget", "StringListArrayWidget", "ExclusiveGroupWidget",
+                 "ExclusiveGroupAccordionWidget", "FreeEditionWidget", "DateRangeWidget", "GeographicExtentWidget",
+                 "GeographicLocationWidget", "LicenceWidget"}
 
 
 async def _get_json(url: str):
@@ -212,7 +216,7 @@ def describe(dataset_id: str, refresh: bool = False) -> dict:
         location = {"step": [det.get("stepY"), det.get("stepX")], "range": det.get("range")}
     fmt_field = next((f for f in FORMAT_FIELDS if f in ws), None)
     formats = _choices(ws[fmt_field])[0] if fmt_field else []
-    licences = [{"id": x.get("id"), "revision": int(x.get("revision", 0)), "label": x.get("label") or x.get("id"),
+    licences = [{"id": x.get("id"), "revision": int(x.get("revision") or 0), "label": x.get("label") or x.get("id"),
                  "url": x.get("contents_url")}
                 for x in ((ws.get("licences") or {}).get("details") or {}).get("licences", [])]
     groups, in_group = [], set()
@@ -226,6 +230,10 @@ def describe(dataset_id: str, refresh: bool = False) -> dict:
     skip = OWN_FIELDS | {g["name"] for g in groups}
     options = [_option(w) for n, w in ws.items()
                if n not in skip and w.get("type") in ("StringListWidget", "StringChoiceWidget", "StringListArrayWidget")]
+    # required fields the app has no control for: the planner refuses such a dataset with a clear error
+    unsupported = sorted(n for n, w in ws.items()
+                         if w.get("required") and n not in skip and n not in in_group
+                         and w.get("type") not in HANDLED_TYPES)
     return {
         "id": dataset_id,
         "title": (summary or {}).get("title", dataset_id),
@@ -245,6 +253,7 @@ def describe(dataset_id: str, refresh: bool = False) -> dict:
         "options": options,
         "notes": [n for n in notes if n],
         "grouped": sorted(in_group),  # fields that are only sent when their group is chosen
+        "unsupported": unsupported,  # required fields of a widget type this app cannot fill (see HANDLED_TYPES)
     }
 
 
@@ -269,6 +278,48 @@ def allowed(table: list[dict], selection: dict) -> dict[str, list[str]]:
                 vals |= _as_set(e.get(f))
         out[f] = sorted(vals)
     return out
+
+
+def needed(table: list[dict], field_name: str, selection: dict) -> bool:
+    """Whether a field matters for a selection: some constraints entry that fits the selection's *other* fields
+    mentions it (CERRA asks for a lead time only for forecasts, a soil layer only for soil fields). Without
+    constraints every field matters."""
+    if not table:
+        return True
+    sel = {k: _as_set(v) for k, v in selection.items() if k != field_name and _as_set(v)}
+
+    def fits(e):
+        return all(_as_set(e[k]) & want for k, want in sel.items() if k in e)
+    return any(field_name in e for e in table if fits(e))
+
+
+def option_state(desc: dict, table: list[dict], selection: dict) -> dict:
+    """The dataset options that apply to a selection (variables, levels and the options chosen so far), each with
+    only the values that exist together with it, as the CDS download form shows them. ``dropped`` lists chosen
+    options that no longer apply (their value must not be sent)."""
+    opts = desc.get("options", [])
+    fields = set().union(*(e.keys() for e in table)) if table else set()
+    # Monotone: an option, once hidden, stays hidden. Each pass only adds to the set, so the loop ends (at most one
+    # pass per option) and the result does not depend on the order in which options would flip back and forth.
+    hidden: set[str] = set()
+    for _ in range(len(opts) + 1):
+        sel = {k: v for k, v in selection.items() if _as_set(v) and k not in hidden}
+        now = hidden | {o["name"] for o in opts if o["name"] in fields and not needed(table, o["name"], sel)}
+        if now == hidden:
+            break
+        hidden = now
+    sel = {k: v for k, v in selection.items() if _as_set(v) and k not in hidden}
+    ok = allowed(table, sel) if table else {}
+    out = []
+    for o in opts:
+        if o["name"] in hidden:
+            continue
+        vals = o["values"]
+        if o["name"] in fields:  # a constrained option shows only the values that exist with the selection
+            have = set(ok.get(o["name"], []))
+            vals = [v for v in vals if v in have]  # none when nothing exists: never a value invalid() flags
+        out.append({**o, "values": vals})
+    return {"options": out, "dropped": sorted(n for n in hidden if _as_set(selection.get(n)))}
 
 
 def invalid(table: list[dict], request: dict) -> dict[str, list[str]]:

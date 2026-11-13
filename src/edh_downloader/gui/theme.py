@@ -43,6 +43,18 @@ html, body {{ background: var(--edh-bg) !important; color: var(--edh-text); font
 .edh-struct {{ padding: 16px; }}
 .edh-kpi {{ padding: 10px 14px; }}
 .edh-rec {{ padding: 10px 14px; }}
+/* job card: what a running job is doing; the request table's states */
+.edh-act {{ background: var(--edh-surface-2); border-radius: var(--edh-r); padding: 8px 12px; }}
+.edh-req-active {{ color: var(--edh-accent); }}
+.edh-req-ok {{ color: var(--edh-ok); }}
+.edh-req-wait {{ color: var(--edh-warn); }}
+.edh-req-err {{ color: var(--edh-err); }}
+.edh-req-idle {{ color: var(--edh-muted); }}
+/* section 5: input format -> staging -> output */
+.edh-flow-step {{ flex: 0 1 auto; min-width: 10rem; }}
+.edh-flow-value {{ font-size: 1rem; font-weight: 500; line-height: 1.4; }}
+.edh-flow-note {{ max-width: 24rem; padding-left: 4px; }}
+@media (max-width: 767px) {{ .edh-flow-step {{ flex: 1 1 100%; }} .edh-flow-note {{ max-width: none; padding-left: 0; }} }}
 .edh-opt {{ padding: 14px 16px !important; cursor: pointer; gap: 6px !important; }}
 .edh-opt:hover {{ background: var(--edh-selected) !important; }}
 .edh-opt.selected {{ background: var(--edh-selected) !important; outline: 2px solid var(--edh-accent); }}

@@ -191,6 +191,111 @@ def job_resume_cost(s: dict) -> tuple[str, bool]:
     return f"Resuming needs about {left:,} more requests, but only {room:,} are left this month by this app's count. {then}", True
 
 
+def _seconds(a: str | None, b: str | None = None) -> float | None:
+    """Seconds from ISO time ``a`` to ``b`` (now when None); None when unknown. Times without a zone are UTC."""
+    if not a:
+        return None
+    try:
+        t0 = datetime.fromisoformat(str(a).replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(str(b).replace("Z", "+00:00")) if b else datetime.now(timezone.utc)
+    except ValueError:
+        return None
+    t0 = t0 if t0.tzinfo else t0.replace(tzinfo=timezone.utc)
+    t1 = t1 if t1.tzinfo else t1.replace(tzinfo=timezone.utc)
+    return max(0.0, (t1 - t0).total_seconds())
+
+
+def activity_rows(a: dict) -> list[dict]:
+    """What a running job is doing right now (``state["activity"]``), as rows for the job card: an icon, a
+    title, a detail line, a fraction done (None: not known) and a right-hand label."""
+    rows = []
+    u = a.get("unit")
+    if u:
+        items, item = max(1, u.get("items") or 1), max(1, u.get("item") or 1)
+        steps = max(1, u.get("steps") or 1)
+        frac = min(1.0, ((item - 1) + (u.get("steps_done") or 0) / steps) / items)
+        lev = u.get("level")
+        what = (u.get("var") or "") + (f" at level {lev:g}" if isinstance(lev, (int, float)) else
+                                       f" at level {lev}" if lev is not None else "")
+        phase = {"reading": "reading and cutting", "writing": "aggregating and writing",
+                 "committing": "committing to Icechunk"}.get(u.get("phase"), u.get("phase") or "")
+        rows.append({"icon": "memory", "title": f"Processing unit {u['index']:,} of {u['of']:,}",
+                     "detail": f"{str(u.get('first'))[:16]} → {str(u.get('last'))[:16]} · "
+                               f"{what or 'starting'} ({item}/{items}) · {u.get('steps_done', 0):,}/{steps:,} "
+                               f"source steps · {phase}",
+                     "frac": 1.0 if u.get("phase") == "committing" else frac,
+                     "right": "commit" if u.get("phase") == "committing" else f"{100 * frac:.0f}%"})
+    for d in a.get("downloads") or []:
+        size, got, rate = d.get("size"), d.get("bytes") or 0, d.get("rate_bps") or 0
+        frac = min(1.0, got / size) if size else None
+        left = f" · {human_duration((size - got) / rate)} left" if size and rate > 0 and got < size else ""
+        rows.append({"icon": "download", "title": f"Downloading request {d['request']:,}",
+                     "detail": f"{str(d.get('start'))[:10]} → {str(d.get('end'))[:10]} · {human_bytes(got)}"
+                               + (f" of {human_bytes(size)}" if size else "") + f" · {human_bytes(rate)}/s{left}",
+                     "frac": frac, "right": f"{100 * frac:.0f}%" if frac is not None else human_bytes(got)})
+    sc = a.get("scan")
+    if sc:
+        total = sc.get("total") or 0
+        frac = sc.get("done", 0) / total if total else None
+        rows.append({"icon": "description", "title": "Converting NetCDF",
+                     "detail": f"{sc.get('what', '')} · {sc.get('done', 0):,}/{total:,} files", "frac": frac,
+                     "right": f"{100 * frac:.0f}%" if frac is not None else ""})
+    ex = a.get("export")
+    if ex and a.get("stage") == "exporting":
+        total, done = ex.get("total"), ex.get("done") or 0
+        frac = done / total if total else None
+        took = _seconds(ex.get("since"))
+        rows.append({"icon": "output", "title": "Exporting to Zarr",
+                     "detail": (f"{done:,}/{total:,} objects" if total else "preparing") +
+                               (f" · {human_duration(took)} so far" if took and took >= 60 else "") +
+                               f" · {ex.get('path', '')}",
+                     "frac": frac, "right": f"{100 * frac:.0f}%" if frac is not None else ""})
+    return rows
+
+
+REQ_STATE = {"planned": "not submitted", "submitting": "submitting", "ready": "ready to download",
+             "downloaded": "downloaded, waiting to be processed", "failed": "failed"}
+
+
+def request_rows(requests: list[dict], activity: dict, files_only: bool = False) -> list[dict]:
+    """The ledger of a CDS job as table rows: where each request is, how long it waited and ran on the CDS,
+    and how much of its file is downloaded."""
+    downloading = {d["request"]: d for d in (activity or {}).get("downloads") or []}
+    processing = set(((activity or {}).get("unit") or {}).get("requests") or [])
+    rows = []
+    for r in requests:
+        n = r["index"] + 1
+        st = r.get("state")
+        if n in downloading:
+            d = downloading[n]
+            pct = f" {100 * d['bytes'] / d['size']:.0f}%" if d.get("size") else ""
+            label, tone = f"downloading{pct}", "active"
+        elif n in processing and st in ("downloaded", "done"):
+            label, tone = "processing", "active"
+        elif st == "queued":
+            label, tone = ("running on the CDS", "active") if r.get("status") == "running" else ("in the CDS queue", "wait")
+        elif st == "done":
+            label, tone = ("saved" if files_only else "processed", "ok")
+        elif st == "downloaded" and files_only:
+            label, tone = "saved", "ok"
+        else:
+            label = REQ_STATE.get(st, st or "?")
+            tone = "err" if st == "failed" else "ok" if st == "downloaded" else "idle"
+        if st == "failed" and r.get("error"):
+            label += f": {r['error'][:80]}"
+        waited = _seconds(r.get("submitted_at"), r.get("started") or (None if st == "queued" else r.get("finished")))
+        ran = _seconds(r.get("started"), r.get("finished")) if r.get("started") else None
+        if st in ("planned", "submitting"):
+            waited = ran = None
+        rows.append({"n": n, "period": f"{str(r.get('start'))[:10]} → {str(r.get('end'))[:10]}",
+                     "fields": f"{r.get('fields') or 0:,}", "state": label, "tone": tone,
+                     "waited": human_duration(waited) if waited is not None else "—",
+                     "ran": human_duration(ran) if ran is not None else "—",
+                     "size": human_bytes(r.get("size") or r.get("bytes_est") or 0) if (r.get("size") or r.get("bytes_est")) else "—",
+                     "tries": r.get("attempts") or 0})
+    return rows
+
+
 def jobs_stale_html(ago: str | None) -> str:
     """Shown in place of the summary line when the list can't be refreshed. ``ago`` comes from time_ago."""
     when = f" Last update {ago} ago." if ago else ""
@@ -223,10 +328,18 @@ CDS_KEY_URL = "https://cds.climate.copernicus.eu/profile"
 CDS_DATASET_URL = "https://cds.climate.copernicus.eu/datasets/{}?tab=download"
 TIER_TEXT = {  # what the app does with a CDS dataset, by tier (sources/cds/catalog.py)
     "grib": ("Full pipeline", "GRIB fields: area, statistics, Icechunk and Zarr"),
-    "netcdf": ("Files", "delivered as the NetCDF files the CDS produces"),
+    "netcdf": ("Full pipeline", "NetCDF files: area, statistics, Icechunk and Zarr (kept as files if not a grid)"),
     "timeseries": ("Files · time series", "one file per point, as the CDS produces it"),
     "table": ("Not available", "in-situ observation tables cannot be made into a gridded store"),
 }
+FORMAT_LABELS = {"grib": "GRIB", "netcdf": "NetCDF", "netcdf4": "NetCDF4", "netcdf_legacy": "NetCDF",
+                 "netcdf_zip": "NetCDF (zip)", "csv": "CSV", "zip": "ZIP", "tgz": "TGZ"}
+VAR_COLUMNS = [
+    {"name": "name", "label": "Name", "field": "name", "sortable": True, "align": "left"},
+    {"name": "long_name", "label": "Description", "field": "long_name", "align": "left"},
+    {"name": "units", "label": "Units", "field": "units", "align": "left"},
+    {"name": "kind", "label": "Dimensions", "field": "kind", "align": "left"},
+]
 GRIDS = {"native": "Native", "0.25": "0.25°", "0.5": "0.5°", "1": "1°", "2.5": "2.5°", "custom": "Custom"}
 EDH_SOURCE = {"id": "edh", "title": "Earth Data Hub", "short": "EDH", "key_url": QUOTA_URL, "has_quota": True,
               "check_cost": "1 request", "jobs": True,
@@ -290,6 +403,28 @@ class IconToggle(ui.toggle):
     def _update_options(self) -> None:
         super()._update_options()
         self._props["options"] = [{**o, "icon": i} for o, i in zip(self._props["options"], self._icons)]
+
+
+class SearchSelect(ui.select, component="search_select.js"):
+    """A select for long catalogues: typing filters its popup by every word, in any order, in an option's label or
+    its search text (``set_search``), ignoring case, accents and punctuation; label matches are listed first."""
+
+    def __init__(self, options, **kwargs):
+        super().__init__(options, with_input=True, **kwargs)
+        self._props["search"] = []
+        with self.add_slot("prepend"):
+            ui.icon("search", size="20px").classes("edh-muted")
+        with self.add_slot("no-option"):
+            ui.item("No dataset matches these words.").classes("edh-muted")
+
+    def set_search(self, texts: list[str]) -> None:
+        """Extra words to match per option, in the option order (like ``option_template``'s images)."""
+        self._props["search"] = texts
+
+
+def search_text(item: dict) -> str:
+    """What a dataset is found by beyond its title and id: its CDS keywords, without their 'Facet: ' names."""
+    return " ".join(k.split(": ", 1)[-1] for k in item.get("keywords") or [])
 
 
 def dataset_image(url: str | None, alt: str, size: str):
@@ -453,7 +588,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
            "thumbs": {}, "thumbs_asked": set(),  # thumbs: collection -> dataset id -> image URL
            # per source: the collection and dataset last chosen, and the key
            "sel": {"edh": ("era5", "era5-single-levels-atmosphere"), "cds": ("Reanalysis", "reanalysis-era5-single-levels")},
-           "keysel": {}, "cds_desc": None, "cds_thumbs": {}}
+           "keysel": {}, "cds_desc": None, "cds_thumbs": {},
+           "src_gen": 0, "items_tok": 0, "opts_seq": 0}  # tokens: drop answers that a newer request has overtaken
 
     # ================================================================ header
     with ui.header().classes("edh-header items-center justify-between px-3 sm:px-6 py-2"):
@@ -582,7 +718,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 "unelevated toggle-color=primary no-caps").classes("edh-toggle edh-tour-source")
                             with ui.row().classes("w-full items-center gap-3 no-wrap max-sm:flex-wrap"):
                                 coll_select = ui.select({"era5": "ERA5"}, value="era5", label="Collection").classes("w-48")
-                                ds_select = ui.select({}, label="Dataset", with_input=True).classes(
+                                ds_select = SearchSelect({}, label="Dataset").classes(
                                     "grow min-w-0 max-sm:order-last max-sm:basis-full")
                                 ui.button(icon="refresh", on_click=lambda: load_dataset(refresh=True)).props(
                                     "flat round").tooltip("reload the dataset description from its source")
@@ -603,12 +739,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                     ui.icon("search")
                                 sel_label = ui.label().classes("edh-muted text-caption")
                             sel_chips = ui.row().classes("gap-2 items-center w-full edh-sel-box").style("position:sticky;top:64px;z-index:5;padding:8px 12px")
-                            var_table = ui.table(rows=[], columns=[
-                                {"name": "name", "label": "Name", "field": "name", "sortable": True, "align": "left"},
-                                {"name": "long_name", "label": "Description", "field": "long_name", "align": "left"},
-                                {"name": "units", "label": "Units", "field": "units", "align": "left"},
-                                {"name": "kind", "label": "Dimensions", "field": "kind", "align": "left"},
-                            ], row_key="name", selection="multiple", pagination=8).props("flat dense").classes("edh-table w-full")
+                            var_table = ui.table(rows=[], columns=list(VAR_COLUMNS), row_key="name", selection="multiple", pagination=8).props("flat dense").classes("edh-table w-full")
                             var_search.bind_value(var_table, "filter")
                             with ui.row().classes("items-center gap-2") as level_row:
                                 level_select = ui.select([], multiple=True, label="Pressure levels (hPa)").props(
@@ -620,6 +751,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     with ui.column().classes("gap-5 min-w-0 w-full"):
                         # ---------- time
                         with section(3, "Time", icon="date_range", mark="time"):
+                            hour_inputs = []
                             with ui.row().classes("items-center gap-4"):
                                 for key_, label, hkey in (("start", "First day", "start_hour"), ("end", "Last day", "end_hour")):
                                     with ui.input(label).bind_value(f, key_).classes("w-44") as inp:
@@ -627,16 +759,17 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                             ui.date().bind_value(inp)
                                         with inp.add_slot("append"):
                                             ui.icon("event").on("click", menu.open).classes("cursor-pointer")
-                                    with_tip(ui.number("from hour" if hkey == "start_hour" else "to hour (incl.)",
-                                                       min=0, max=23, step=1, precision=0).bind_value(f, hkey).classes("w-32"),
-                                             "Hour of day (0-23, local time with the UTC offset below). First day starts "
-                                             "at this hour; last day ends at the end of this hour.")
+                                    hour_inputs.append(with_tip(
+                                        ui.number("from hour" if hkey == "start_hour" else "to hour (incl.)",
+                                                  min=0, max=23, step=1, precision=0).bind_value(f, hkey).classes("w-32"),
+                                        "Hour of day (0-23, local time with the UTC offset below). First day starts "
+                                        "at this hour; last day ends at the end of this hour."))
                                     if key_ == "end":
                                         ui.button("Today", on_click=lambda: f.update(end=date.today().isoformat())).props(
                                             "flat dense no-caps").tooltip("set the last day to today")
                                 time_range_label = ui.label().classes("edh-muted text-caption")
                             with ui.row().classes("items-center gap-4"):
-                                with_tip(ui.select(FREQS, label="Time step").bind_value(f, "freq").classes("w-48"),
+                                freq_select = with_tip(ui.select(FREQS, label="Time step").bind_value(f, "freq").classes("w-48"),
                                          "As stored keeps every hour. Other steps aggregate hours into periods using the "
                                          "statistics chosen below.")
                                 ui.number("Hours per step", min=1, max=24 * 31, step=1).bind_value(f, "hours").classes(
@@ -657,8 +790,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         # ---------- area
                         with section(4, "Area", icon="map", mark="area"):
                             with ui.row().classes("items-center gap-5"):
-                                IconToggle({"global": ("Global", "public"), "bbox": ("Box", "crop_free"),
-                                            "points": ("Points", "place")}).bind_value(
+                                area_toggle = IconToggle({"global": ("Global", "public"), "bbox": ("Box", "crop_free"),
+                                                          "points": ("Points", "place")}).bind_value(
                                     f, "mode").props("unelevated toggle-color=primary no-caps").classes("edh-toggle")
                                 with_tip(ui.select({"-180..180": "−180 … 180", "0..360": "0 … 360"},
                                                    label="Output longitudes").bind_value(f, "lon_convention").classes("w-48"),
@@ -711,14 +844,16 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
                     # ---------- output
                     with section(5, "Output", wide=True, icon="folder", mark="output"):
+                        # what goes in and what comes out: input format -> staging -> output (render_flow)
+                        flow_box = ui.row().classes("w-full items-stretch gap-2 no-wrap max-md:flex-wrap edh-flow")
                         files_note = ui.label().classes("text-body2 text-accent")
                         files_note.set_visibility(False)
                         with ui.row().classes("w-full items-center justify-between pb-2 mb-2 border-b border-white/10") as mode_row:
                             with ui.row().classes("items-center gap-2"):
                                 ui.label("Store mode").classes("text-body2 text-weight-medium")
                                 tip("Create a brand-new dataset or extend an existing Icechunk dataset forward or backward in time.")
-                            IconToggle({"create": ("New store", "create_new_folder"),
-                                        "extend": ("Extend existing Icechunk", "more_time")}).bind_value(
+                            mode_toggle = IconToggle({"create": ("New store", "create_new_folder"),
+                                                      "extend": ("Extend existing Icechunk", "more_time")}).bind_value(
                                 f, "target_mode").props("no-caps unelevated toggle-color=primary").classes("edh-toggle")
 
                         with ui.row().classes("w-full items-center gap-4 no-wrap max-md:flex-wrap") as new_store_row:
@@ -744,22 +879,19 @@ def build_page(be, local: bool = False, embedded: bool = False):
                             extend_alert = ui.card().classes("w-full bg-red-950/40 border border-red-500/50 p-3 rounded text-red-200 text-caption")
                             extend_alert.set_visibility(False)
 
+                        fmt_select.on_value_change(lambda _: render_flow())
+                        mode_toggle.on_value_change(lambda _: render_flow())
                         new_store_row.bind_visibility_from(f, "target_mode", lambda v: v == "create")
                         extend_store_box.bind_visibility_from(f, "target_mode", lambda v: v == "extend")
                         out_paths = ui.label().classes("edh-mono text-caption edh-muted")
 
-                        with ui.row().classes("items-center gap-3") as cds_layout_row:
-                            with_tip(ui.select({"auto": "Automatic", "timeseries": "Time series", "maps": "Maps"},
-                                               label="Chunk layout").bind_value(f, "chunk_layout").classes("w-48"),
-                                     "Time series: long in time, small in space (cheap to read years at a point). "
-                                     "Maps: the whole area for a few steps. Automatic: balanced.")
-                        cds_layout_row.set_visibility(False)
                         # -- dataset structure: drawing + tree, updated live
                         with ui.column().classes("w-full gap-3 edh-struct") as struct_box:
                             with ui.row().classes("w-full items-center justify-between gap-3"):
                                 ui.label("Dataset structure").classes("edh-subtitle")
                                 struct_kpis = ui.row().classes("items-center gap-2")
                             struct_empty = ui.label("Select a dataset and variables.").classes("edh-muted")
+                            struct_notes = ui.column().classes("w-full gap-1")
                             with ui.column().classes("w-full gap-3") as struct_body:
                                 struct_view = ui.column().classes("w-full")
 
@@ -920,23 +1052,35 @@ def build_page(be, local: bool = False, embedded: bool = False):
         return {"source": "cds"} if f["source"] == "cds" else {}
 
     async def load_collections():
-        cds = f["source"] == "cds"
+        gen, cds = ctx["src_gen"], f["source"] == "cds"
         try:
             cols = await be.call("collections", **src_kw())
+            if gen != ctx["src_gen"]:  # the source was switched meanwhile
+                return
             coll_select.props(f'label="{"Category" if cds else "Collection"}"')
             coll_select.add_slot("option", option_template([c.get("thumbnail") for c in cols]))
             fallback = "Reanalysis" if cds else "era5"
             coll_select.set_options({c["id"]: c["title"] + (f" · {c['count']}" if cds else "") for c in cols},
                                     value=f["collection"] if f["collection"] in {c["id"] for c in cols} else fallback)
         except Exception as e:
-            ui.notify(f"could not read the catalogue: {e}", type="negative")
-        await load_items()
+            if gen == ctx["src_gen"]:
+                ui.notify(f"could not read the catalogue: {e}", type="negative")
+        if gen == ctx["src_gen"]:
+            await load_items()
 
     async def load_items():
+        ctx["items_tok"] += 1
+        tok, gen = ctx["items_tok"], ctx["src_gen"]
+
+        def stale():
+            return (tok, gen) != (ctx["items_tok"], ctx["src_gen"])  # a newer request, or another source, meanwhile
         try:
             items = await be.call("datasets", collection=f["collection"], **src_kw())
         except Exception as e:
-            ui.notify(f"could not list datasets: {e}", type="negative")
+            if not stale():
+                ui.notify(f"could not list datasets: {e}", type="negative")
+            return
+        if stale():
             return
         ctx["items"] = {i["id"]: i for i in items}
         if f["source"] == "cds":
@@ -945,6 +1089,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             ctx["thumbs"][f["collection"]] = {i["id"]: i.get("thumbnail") for i in items}
         offered = [i for i in items if not i.get("deprecated")]
         ds_select.add_slot("option", option_template([i.get("thumbnail") for i in offered]))
+        ds_select.set_search([search_text(i) for i in offered])
         ds_select.options = {i["id"]: f"{i['title']}{OPTION_SEPARATOR}{i['id']}" for i in offered}
         if f["dataset"] not in ds_select.options and ds_select.options:
             f["dataset"] = next(iter(ds_select.options))
@@ -978,7 +1123,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
         try:
             ds = await be.call("dataset_load", info=info, key=f["key"], refresh=refresh)
         except BackendError as e:
-            ds_info.content = f"**Could not load dataset:** {e}"
+            if f["dataset"] == info["id"] and f["source"] == "edh":
+                ds_info.content = f"**Could not load dataset:** {e}"
+            return
+        if f["dataset"] != info["id"] or f["source"] != "edh":  # another dataset or source was chosen meanwhile
             return
         ds["vars"] = {v["name"]: v for v in ds["variables"]}
         ctx["ds"], ctx["info"] = ds, info
@@ -1012,9 +1160,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
         try:
             d = await be.call("cds_describe", dataset=info["id"], key=f["key"], refresh=refresh)
         except BackendError as e:
-            ds_info.content = f"**Could not read the dataset:** {e}"
+            if f["dataset"] == info["id"] and f["source"] == "cds":
+                ds_info.content = f"**Could not read the dataset:** {e}"
             return
-        if d["id"] != f["dataset"]:  # another dataset was chosen meanwhile
+        if d["id"] != f["dataset"] or f["source"] != "cds":  # another dataset or source was chosen meanwhile
             return
         ctx["cds_desc"] = d
         lv = d["levels"]
@@ -1053,7 +1202,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
         with cds_box:
             title, sub = TIER_TEXT.get(d["tier"], ("", ""))
             with ui.row().classes("items-center gap-2"):
-                ui.badge(title).props("color=primary" if d["tier"] == "grib" else "color=grey-7")
+                ui.badge(title).props("color=primary" if d["tier"] in ("grib", "netcdf") else "color=grey-7")
                 ui.label(sub).classes("edh-muted text-caption")
             labels = ", ".join(l["label"] for l in d["licences"])
             missing = d.get("licences_missing")
@@ -1068,36 +1217,144 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 ui.label(f"Licence: {labels} (checked when a CDS key is set)").classes("edh-muted text-caption")
             elif labels:
                 ui.label(f"Licence accepted: {labels}").classes("edh-muted text-caption")
-            if d["options"]:
-                ui.label("Dataset options").classes("text-body2 text-weight-medium")
-            with ui.row().classes("w-full gap-3"):
-                for o in d["options"]:
-                    cur = f["cds_options"].get(o["name"])
-                    if cur in (None, [], ""):
-                        cur = o["default"] or (o["values"][:1] if len(o["values"]) == 1 else [])
-                    cur = cur if isinstance(cur, list) else [cur]
-                    opts = {v: o["labels"].get(v, v) for v in o["values"]}
-
-                    def changed(e, n=o["name"]):
-                        f["cds_options"][n] = e.value
-                        schedule_plan()
-
-                    sel = ui.select(opts, label=o["label"], multiple=o["multiple"], with_input=len(opts) > 12,
-                                    value=[c for c in cur if c in opts] if o["multiple"] else (cur[0] if cur and cur[0] in opts else None),
-                                    on_change=changed).props(
-                        "dense outlined" + (" use-chips" if o["multiple"] else "")).classes("min-w-[14rem]")
-                    if o.get("help"):
-                        with_tip(sel, re.sub(r"<[^>]+>", " ", o["help"])[:500])
+            ctx["cds_opts_box"] = ui.column().classes("w-full gap-2")
+            ctx["cds_opt_sel"] = {}
             for n in d["notes"][:2]:
                 with ui.expansion("Notes from the CDS about this dataset", icon="info").classes("w-full edh-expansion"):
                     ui.markdown(re.sub(r"<[^>]+>", " ", n)[:3000]).classes("text-caption")
+
+    def _option_values(o) -> tuple[dict, object]:
+        """A dataset option's choices (with the chosen values even when they no longer fit the rest, marked) and
+        the value to show: the choice, else the form's default, else the only possible value."""
+        cur = f["cds_options"].get(o["name"])
+        if cur in (None, [], ""):
+            cur = o["default"] or (o["values"][:1] if len(o["values"]) == 1 else [])
+        cur = cur if isinstance(cur, list) else [cur]
+        opts = {v: o["labels"].get(v, v) for v in o["values"]}
+        for c in cur:
+            if c not in opts:
+                opts[c] = f"{o['labels'].get(c, c)} (not with this selection)"
+        return opts, (cur if o["multiple"] else (cur[0] if cur else None))
+
+    async def refresh_cds_options():
+        """Show only the dataset options that apply to the chosen variables, levels and options, each with the
+        values that exist together with them, as the CDS download form does (a lead time only for forecasts, a
+        soil layer only for soil fields, the models that ran the chosen experiment)."""
+        d, box = ctx.get("cds_desc"), ctx.get("cds_opts_box")
+        if f["source"] != "cds" or not d or box is None:
+            return
+        ctx["opts_seq"] += 1
+        seq = ctx["opts_seq"]
+        sel = {"variable": list(f["variables"]), **f["cds_options"]}
+        if d["levels"] and f["levels"]:
+            sel[d["levels"]["field"]] = [str(x) for x in f["levels"]]
+        try:
+            st = await be.call("cds_options", dataset=d["id"], selection=sel)
+        except Exception:  # noqa: BLE001  (an older server: every option, every value)
+            st = {"options": d["options"], "dropped": []}
+        if seq != ctx["opts_seq"] or ctx.get("cds_desc") is not d:  # a newer request, or another dataset, meanwhile
+            return
+        for n in st["dropped"]:  # chosen for another kind of request: not sent
+            f["cds_options"].pop(n, None)
+        opts = st["options"]
+        filled = False
+        for o in opts:  # one possible value and nothing chosen: that value (the CDS still wants it named)
+            if f["cds_options"].get(o["name"]) in (None, [], "") and len(o["values"]) == 1 and not o["default"]:
+                f["cds_options"][o["name"]] = o["values"] if o["multiple"] else o["values"][0]
+                filled = True
+        sels = ctx["cds_opt_sel"]
+        if [o["name"] for o in opts] == list(sels):  # same options: update their choices in place
+            for o in opts:
+                choices, value = _option_values(o)
+                if sels[o["name"]].options != choices:
+                    sels[o["name"]].set_options(choices, value=value)
+            if st["dropped"] or filled:
+                schedule_plan()
+            if filled:  # the filled value can narrow the others
+                later(refresh_cds_options)
+            return
+        box.clear()
+        sels.clear()
+        with box:
+            if not opts:
+                return
+            with ui.row().classes("items-center gap-1"):
+                ui.label("Dataset options").classes("text-body2 text-weight-medium")
+                tip("Only the options that apply to the selected variables and to the options chosen so far, "
+                    "each with the values that exist for them.")
+            with ui.row().classes("w-full gap-3"):
+                for o in opts:
+                    choices, value = _option_values(o)
+
+                    def changed(e, n=o["name"]):
+                        f["cds_options"][n] = e.value
+                        later(refresh_cds_options)
+                        schedule_plan()
+
+                    sel_ = ui.select(choices, label=o["label"], multiple=o["multiple"], with_input=len(choices) > 12,
+                                     value=value, on_change=changed).props(
+                        "dense outlined" + (" use-chips" if o["multiple"] else "")).classes("min-w-[14rem]")
+                    if o.get("help"):
+                        with_tip(sel_, re.sub(r"<[^>]+>", " ", o["help"])[:500])
+                    sels[o["name"]] = sel_
+        if st["dropped"] or filled:
+            schedule_plan()
+        if filled:
+            later(refresh_cds_options)
+
+    def render_flow():
+        """Section 5's first line: the input format, then what the job makes of it (the Icechunk staging
+        repository, the Zarr export), or the files kept as delivered."""
+        from ..sources.cds.planner import input_format
+
+        cds = f["source"] == "cds"
+        d = ctx.get("cds_desc") if cds else None
+        fmt_out = f["out_format"]
+        steps: list[tuple[str, str, str]] = []
+        if cds and d is None:
+            steps.append(("Input format", "—", "choose a dataset"))
+        elif cds:
+            fmt = input_format(d)
+            label = FORMAT_LABELS.get(fmt, fmt.upper())
+            sub = {"grib": "decoded field by field", "netcdf": "zips unpacked"}.get(
+                d["tier"], "as the CDS produces it")
+            steps.append(("Input format", label, sub))
+        else:
+            steps.append(("Input format", "Zarr", "Earth Data Hub chunks"))
+        if cds and d is not None and d["tier"] not in ("grib", "netcdf"):
+            ok = d["tier"] != "table"
+            steps.append(("Output", "Files" if ok else "Not available",
+                          "as delivered, with manifest.json" if ok else "tables are not a gridded store"))
+        elif not (cds and d is None):
+            extend = not cds and f["target_mode"] == "extend"
+            if extend:
+                steps.append(("Store", "Icechunk", "the existing one, extended"))
+            else:
+                steps.append(("Staging" if fmt_out == "zarr" else "Store", "Icechunk",
+                              "resumable; removed after export" if fmt_out == "zarr" else
+                              "kept, with its commit history"))
+            if fmt_out != "icechunk":
+                steps.append(("Output", "Zarr v3", "written at the end"))
+        flow_box.clear()
+        with flow_box:
+            for i, (lab, val, sub) in enumerate(steps):
+                if i:
+                    ui.icon("arrow_forward", size="18px").classes("edh-muted self-center max-md:hidden")
+                with ui.column().classes("edh-kpi gap-0 min-w-0 edh-flow-step"):
+                    ui.label(lab).classes("edh-kpi-label")
+                    ui.label(val).classes("edh-flow-value")
+                    ui.label(sub).classes("edh-muted text-caption")
+            if cds and d is not None and d["tier"] == "netcdf":
+                ui.label("Files that are not a grid one store can hold (tables, several products for one time) "
+                         "are kept as delivered instead.").classes("edh-muted text-caption self-center grow "
+                                                                   "min-w-0 edh-flow-note")
 
     def apply_source_ui():
         """Show what applies to the chosen source (and, for the CDS, to the chosen dataset)."""
         cds = f["source"] == "cds"
         d = ctx.get("cds_desc") if cds else None
         tier = d["tier"] if d else None
-        files = bool(cds and tier and tier != "grib")
+        files = bool(cds and tier and tier not in ("grib", "netcdf"))
         ctx["files_only"] = files
         cds_box.set_visibility(cds and d is not None)
         grid_row.set_visibility(bool(cds and tier == "grib" and d.get("area")))
@@ -1112,10 +1369,26 @@ def build_page(be, local: bool = False, embedded: bool = False):
         files_note.text = (f"Saved as the files the Climate Data Store delivers, in {f['directory']}/{f['name']}.files "
                            "with a manifest.json listing each request.") if files else ""
         files_note.set_visibility(files)
+        render_flow()
         fmt_select.set_visibility(not files)
-        struct_box.set_visibility(not cds)
-        cds_layout_row.set_visibility(cds and not files)
+        struct_box.set_visibility(not files)
         mode_row.set_visibility(not cds)
+        # time: monthly and yearly products have no hours, and are not aggregated to finer steps
+        tkind = d["time"]["kind"] if d else "ymd"
+        for h in hour_inputs:
+            h.set_visibility(tkind == "ymd")
+        freqs = (FREQS if tkind == "ymd" else {k: v for k, v in FREQS.items() if k in ("none", "year")}
+                 if tkind == "ym" else {"none": FREQS["none"]})
+        if f["freq"] not in freqs:
+            f["freq"] = "none"
+        freq_select.set_options(freqs, value=f["freq"])
+        # area: a dataset delivered for its own domain has no "global"
+        whole = bool(d and not d.get("area"))
+        area_toggle.set_options({"global": "Whole domain" if whole else "Global", "bbox": "Box", "points": "Points"},
+                                value=f["mode"])
+        # variables: the CDS form gives no units, and every variable has the same dimensions
+        var_table.columns = [c for c in VAR_COLUMNS if not (cds and c["name"] == "units")]
+        var_table.update()
         if cds:
             f["target_mode"] = "create"
         for el in (conn_row, sample_row, quota_row, wait_row):
@@ -1129,8 +1402,12 @@ def build_page(be, local: bool = False, embedded: bool = False):
         ctx["sel"][f["source"]] = (f["collection"], f["dataset"])
         f["source"] = v
         f["collection"], f["dataset"] = ctx["sel"][v]
-        f.update(variables=[], levels=[], stats={}, cds_options={}, chunk_layout="auto" if v == "cds" else None)
-        ctx.update(ds=None, info=None, cds_desc=None, plan=None)
+        f.update(variables=[], levels=[], stats={}, cds_options={}, chunk_layout=None)
+        # what came from the previous source's dataset goes too; answers still on their way are dropped
+        ctx["src_gen"] += 1
+        ctx["plan_seq"] += 1
+        ctx.update(ds=None, info=None, cds_desc=None, plan=None, rec=None, items={}, cds_opts_box=None, cds_opt_sel={})
+        launch_btn.disable()
         var_table.rows, var_table.selected = [], []
         var_table.update()
         level_row.set_visibility(False)
@@ -1166,10 +1443,13 @@ def build_page(be, local: bool = False, embedded: bool = False):
             ui.label(", ".join(f["variables"]) if f["variables"] else "none, tick variables below").classes(
                 "edh-mono" if f["variables"] else "edh-muted")
         render_stats()
+        if f["source"] == "cds":
+            later(refresh_cds_options)
         schedule_plan()
 
     var_table.on("selection", lambda e: on_vars_changed())
-    level_select.on_value_change(lambda e: (f.update(levels=e.value or []), schedule_plan()))
+    level_select.on_value_change(lambda e: (f.update(levels=e.value or []), schedule_plan(),
+                                            later(refresh_cds_options) if f["source"] == "cds" else None))
 
     def render_stats():
         stats_box.clear()
@@ -1335,10 +1615,14 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
         later(schedule_plan)
 
+    def rec_of() -> tuple:
+        """The recommended chunk layout and why; ("auto", "") until a plan has one."""
+        return ctx["rec"] or ("auto", "")
+
     def layout_choice() -> str:
         if f["out_format"] == "icechunk":
             return "auto"
-        return f["chunk_layout"] or ctx["rec"][0]
+        return f["chunk_layout"] or rec_of()[0]
 
     def build_spec() -> JobSpec:
         info = ctx.get("info") or {}
@@ -1349,6 +1633,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
         if cds and f["grid"] != "native":
             g = float(f["grid_custom"] or 0.5) if f["grid"] == "custom" else float(f["grid"])
             grid = [g, g]
+        # the CDS's monthly and yearly products have no hours (apply_source_ui hides them): whole days then
+        hourly = not cds or ((ctx.get("cds_desc") or {}).get("time") or {}).get("kind", "ymd") == "ymd"
+        start_hour = int(f["start_hour"] or 0) if hourly else 0
+        end_hour = int(23 if f["end_hour"] is None else f["end_hour"]) if hourly else 23
         return JobSpec(
             source=f["source"],
             dataset=f["dataset"], collection=f["collection"], dataset_url=None if cds else info.get("url"),
@@ -1357,8 +1645,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
             cds=CdsSpec(grid=grid, options={k: v for k, v in f["cds_options"].items() if v not in (None, [], "")},
                         max_inflight=int(f["max_inflight"] or 4), pack=f["pack"],
                         max_request_gb=float(f["max_request_gb"] or 10)),
-            time=TimeSpec(start=f["start"], end=f["end"], start_hour=int(f["start_hour"] or 0),
-                          end_hour=int(23 if f["end_hour"] is None else f["end_hour"]), freq=f["freq"], hours=int(f["hours"] or 1),
+            time=TimeSpec(start=f["start"], end=f["end"], start_hour=start_hour,
+                          end_hour=end_hour, freq=f["freq"], hours=int(f["hours"] or 1),
                           tz_offset=int(f["tz_offset"] or 0),
                           stats={k: v for k, v in f["stats"].items() if k in f["variables"] and v}),
             area=AreaSpec(mode=f["mode"], west=float(f["west"] or 0), south=float(f["south"] or 0),
@@ -1389,9 +1677,23 @@ def build_page(be, local: bool = False, embedded: bool = False):
     def schedule_plan():
         if ctx["plan_task"]:
             ctx["plan_task"].cancel()
+        ctx["plan"] = None  # the form changed: the plan shown no longer applies, so it cannot be launched
+        launch_btn.disable()
         ctx["plan_task"] = ui.timer(0.4, update_plan, once=True)
 
+    def plan_failed(e):
+        """A plan that cannot be shown is not launched either: the button stays disabled and the reason is shown."""
+        ctx["plan"] = None
+        launch_btn.disable()
+        summary.clear()
+        with summary:
+            with ui.row().classes("items-start gap-2 no-wrap"):
+                ui.icon("error_outline", color="negative")
+                ui.label(f"Could not show the plan: {e}").classes("text-negative")
+
     async def update_plan():
+        ctx["plan"] = None  # until this plan is ready, the previous one must not be launched
+        launch_btn.disable()
         ds = ctx["ds"]
         ctx["plan_seq"] += 1
         seq = ctx["plan_seq"]
@@ -1420,8 +1722,12 @@ def build_page(be, local: bool = False, embedded: bool = False):
             if seq != ctx["plan_seq"]:
                 return
             if res["ok"] and f["source"] == "cds":
-                ctx["plan"] = res
-                render_cds_summary(res, spec_)
+                try:
+                    ctx["plan"] = res
+                    render_cds_summary(res, spec_)
+                    render_cds_structure(res)
+                except Exception as e:  # noqa: BLE001
+                    plan_failed(e)
                 return
             if not res["ok"]:
                 ctx["plan"] = None
@@ -1434,18 +1740,21 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     ui.label(res["error"]).classes("text-negative")
                 launch_btn.disable()
                 return
-        ctx["rec"] = tuple(res["rec"])
-        ctx["plan"] = res
-        render_summary(res)
-        render_chunking(res)
-        render_encoding(res)
-        if f.get("target_mode") == "extend":
-            tgt = f.get("target_store") or ""
-            direction = f.get("extend_direction", "forward")
-            out_paths.text = f"→ Extending ({direction}) in {tgt}"
-        else:
-            out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
-        launch_btn.enable()
+        try:
+            ctx["rec"] = tuple(res["rec"])
+            ctx["plan"] = res
+            render_summary(res)
+            render_chunking(res)
+            render_encoding(res)
+            if f.get("target_mode") == "extend":
+                tgt = f.get("target_store") or ""
+                direction = f.get("extend_direction", "forward")
+                out_paths.text = f"→ Extending ({direction}) in {tgt}"
+            else:
+                out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
+            launch_btn.enable()
+        except Exception as e:  # noqa: BLE001
+            plan_failed(e)
 
     def render_cds_summary(res, spec_):
         s = res["summary"]
@@ -1466,9 +1775,19 @@ def build_page(be, local: bool = False, embedded: bool = False):
             with ui.grid(columns=2).classes("w-full gap-3"):
                 kpi("Download", f"≈ {human_bytes(s['download_bytes_est'])}" if s["download_bytes_est"] else "—",
                     "estimate · GRIB, 16 bits a value" if s["download_bytes_est"] else "known after the first file")
+                st = res.get("struct")
+                fmt = f["out_format"]
+                if ctx.get("files_only"):
+                    kpi("Output", "files", "as the CDS delivers them")
+                elif st:
+                    kpi({"zarr": "Zarr size", "both": "Zarr + Icechunk", "icechunk": "Icechunk size"}[fmt],
+                        f"≈ {human_bytes(st['disk'] * (2 if fmt == 'both' else 1))}",
+                        f"estimate · {human_bytes(st['raw'])} raw")
+                else:
+                    kpi("Zarr size", "—", "known once the files arrive" if s["tier"] == "netcdf"
+                        else "known after the first file")
                 kpi("Fields", f"{s['fields']:,}", "variables × levels × time steps")
-                kpi("Time steps", f"{s['steps']:,}" if s["steps"] else "—", "from the CDS")
-                kpi("Queue", "live", "each request waits its turn; the job shows it")
+                kpi("Time steps", f"{s['steps']:,}" if s["steps"] else "—", "requested from the CDS")
             if s["first"]:
                 kv("Period", f"{s['first'][:16]} → {s['last'][:16]}")
             kv("Area", "N {} · W {} · S {} · E {}".format(*s["area"]) if s["area"] else
@@ -1476,9 +1795,15 @@ def build_page(be, local: bool = False, embedded: bool = False):
             kv("Grid", s["grid"].split("/")[0] + "°" if s["grid"] else "native")
             if s["levels"]:
                 kv("Levels", ", ".join(s["levels"]))
+            if res.get("layout") and not ctx.get("files_only"):
+                kv("Chunks", chunking.TITLES[res["layout"]] + (" (recommended)" if res["layout"] == res["rec"][0] else ""))
             opts = {k: v for k, v in s["options"].items() if k not in ("data_format", "format")}
             if opts:
                 kv("Options", "; ".join(f"{k}: {', '.join(v) if isinstance(v, list) else v}" for k, v in opts.items()))
+            # costs not checked because the CDS refused the key: the plan is not trusted, nothing is launched
+            key_refused = bool(res.get("key_refused"))
+            if key_refused:
+                blocked.append(res["note"])
             if res["licences_missing"]:
                 blocked.append("Accept the licence first: " + ", ".join(l["label"] for l in res["licences_missing"])
                                + " (on the dataset page of the CDS, Download tab).")
@@ -1491,7 +1816,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 with ui.row().classes("items-start gap-2 no-wrap"):
                     ui.icon("error_outline", color="negative", size="xs")
                     ui.label(b).classes("text-caption text-negative")
-            if res["note"]:
+            if res["note"] and not key_refused:
                 ui.label(res["note"]).classes("text-caption text-warning")
             if alt := res.get("alternative"):
                 with ui.row().classes("items-center gap-2 no-wrap"):
@@ -1518,6 +1843,28 @@ def build_page(be, local: bool = False, embedded: bool = False):
             out_paths.text = "→ " + "   ·   ".join(str(p) for p, keep in ((spec_.zarr_path, o.export_zarr),
                                                                           (spec_.icechunk_path, o.keep_icechunk)) if keep)
         launch_btn.set_enabled(not blocked)
+
+    def render_cds_structure(res):
+        """The Zarr store a CDS job will write, as for Earth Data Hub, from the plan alone (``CdsOutput.preview``):
+        what is still a guess (GRIB names, a projected grid) is said under it."""
+        struct_notes.clear()
+        if not res.get("struct"):
+            ctx["rec"] = None
+            struct_body.set_visibility(False)
+            struct_kpis.clear()
+            struct_empty.text = res.get("struct_error") or (
+                "The store's structure is known once the first file arrives: this dataset's grid is read from "
+                "its files." if f["variables"] else "Select variables to see the store.")
+            struct_empty.set_visibility(True)
+            return
+        ctx["rec"] = tuple(res["rec"])
+        render_chunking(res)
+        render_encoding(res)
+        with struct_notes:
+            for n in res["struct"].get("notes") or []:
+                with ui.row().classes("items-start gap-2 no-wrap"):
+                    ui.icon("info", size="xs").classes("edh-muted")
+                    ui.label(n[:1].upper() + n[1:] + ".").classes("edh-muted text-caption")
 
     def use_dataset(ds_id):
         """Switch to another CDS dataset of the same category (the time-series alternative)."""
@@ -1571,7 +1918,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             if s["levels"]:
                 kv("Levels", ", ".join(map(str, s["levels"])))
             kv("Outputs", ", ".join(s["outputs"]))
-            kv("Chunks", chunking.TITLES[plan["layout"]] + (" (recommended)" if plan["layout"] == ctx["rec"][0] else ""))
+            kv("Chunks", chunking.TITLES[plan["layout"]] + (" (recommended)" if plan["layout"] == rec_of()[0] else ""))
             for w in s["warnings"]:
                 with ui.row().classes("items-start gap-2 no-wrap"):
                     ui.icon("warning_amber", color="warning", size="xs")
@@ -1579,7 +1926,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
     def render_chunking(plan):
         rows = plan["rows"]
-        rec_layout, reason = ctx["rec"]
+        rec_layout, reason = rec_of()
         chosen = plan["layout"]
         opts = {r["layout"]: ("★ " if r["layout"] == rec_layout else "") + r["title"] for r in rows}
         layout_toggle.set_options(opts, value=chosen)
@@ -1627,7 +1974,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
     def pick_layout(lay):
         if not lay or not ctx["plan"] or lay == ctx["plan"]["layout"]:
             return
-        f["chunk_layout"] = None if lay == ctx["rec"][0] else lay
+        f["chunk_layout"] = None if lay == rec_of()[0] else lay
         schedule_plan()
 
     def render_encoding(plan):
@@ -1743,6 +2090,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
     # ------------------------------------------------------------------ jobs tab
     cards: dict = {}  # job id -> (signature, card)
     open_struct: set = set()  # completed jobs whose structure is shown
+    open_reqs: set = set()  # CDS jobs whose request table is shown
+    last_jobs: dict = {}  # job id -> its latest status (the request table reads its live downloads)
     struct_states: dict = {}  # job id -> {"var": ..., "src": ...}
     job_states: dict = {}  # job id -> last status, to announce changes
 
@@ -1762,6 +2111,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
             jobs_rollup.set_visibility(True)
             return
         ctx["jobs_seen"] = datetime.now(timezone.utc).isoformat()
+        last_jobs.clear()
+        last_jobs.update({s_["id"]: s_ for s_ in jobs})
         changed = [f"{s_['id']}: {job_status_label(s_.get('status', '?'))}" for s_ in jobs
                    if s_["id"] in job_states and job_states[s_["id"]] != s_.get("status")]
         job_states.clear()
@@ -1815,7 +2166,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
             # structure (buttons, inputs) is rebuilt only when it changes; live numbers are redrawn in place, so
             # what the user is typing (e.g. connections) survives the refresh
             sig = json.dumps({k: s_.get(k) for k in (*STRUCT_KEYS, "_thumb")}, sort_keys=True, default=str) + \
-                str(s_["id"] in open_struct) + json.dumps(struct_states.get(s_["id"], {}).get("src"))
+                str(s_["id"] in open_struct) + str(s_["id"] in open_reqs) + \
+                json.dumps(struct_states.get(s_["id"], {}).get("src"))
             live_sig = json.dumps({k: v for k, v in s_.items() if k != "_struct"}, sort_keys=True, default=str)
             old, card = cards[s_["id"]][:2]
             if sig != old or "_struct" in s_ and old is None:
@@ -1840,6 +2192,77 @@ def build_page(be, local: bool = False, embedded: bool = False):
     def toggle_struct(jid):
         open_struct.symmetric_difference_update({jid})
         ui.timer(0.01, refresh_jobs, once=True)
+
+    def toggle_reqs(jid):
+        open_reqs.symmetric_difference_update({jid})
+        ui.timer(0.01, refresh_jobs, once=True)
+
+    def _job_activity(s, cds):
+        """What a running job is doing now: each download with its share and speed, the unit being processed
+        (variable, level, source steps), the NetCDF reading, the export. Redrawn with the card's numbers."""
+        a = s.get("activity") or {}
+        rows = activity_rows(a)
+        if cds and s.get("status") == "running" and not rows:
+            c = a.get("requests") or s.get("cds_requests") or {}
+            waiting, running = s.get("cds_waiting") or 0, s.get("cds_running") or 0
+            left = (c.get("planned") or 0) + (c.get("submitting") or 0)
+            ready = c.get("ready") or 0
+            parts = [f"{waiting:,} in the queue" if waiting else "", f"{running:,} running" if running else "",
+                     f"{ready:,} ready to download" if ready else "", f"{left:,} not submitted yet" if left else ""]
+            wait = s.get("cds_oldest_wait_s")
+            rows.append({"icon": "hourglass_top", "title": "Waiting on the CDS",
+                         "detail": " · ".join(x for x in parts if x) +
+                                   (f" · longest wait {human_duration(wait)}" if wait else ""),
+                         "frac": None, "right": ""})
+        for r in rows:
+            with ui.column().classes("w-full gap-1 edh-act"):
+                with ui.row().classes("w-full items-center gap-2 no-wrap"):
+                    ui.icon(r["icon"], size="18px").classes("edh-muted")
+                    ui.label(r["title"]).classes("text-body2 text-weight-medium grow min-w-0")
+                    if r["right"]:
+                        ui.label(r["right"]).classes("text-body2 edh-tabular shrink-0")
+                ui.label(r["detail"]).classes("edh-muted text-caption break-words")
+                bar = ui.linear_progress(value=r["frac"] or 0, show_value=False).props(
+                    "size=4px" + (" indeterminate" if r["frac"] is None else "")).classes("edh-grad-bar")
+                bar.props(f'aria-label="{r["title"]}"')
+
+    def _job_requests(s):
+        """Every request of a CDS job: where it is, how long it waited and ran, its file. Refreshed while open."""
+        jid = s["id"]
+        files_only = not s.get("cds_convert", True)
+        with ui.column().classes("w-full gap-2 edh-struct"):
+            with ui.row().classes("w-full items-center justify-between gap-3"):
+                ui.label("Requests").classes("edh-subtitle")
+                summary_ = ui.label().classes("edh-muted text-caption")
+            cols = [("n", "#", "right"), ("period", "Period", "left"), ("fields", "Fields", "right"),
+                    ("state", "State", "left"), ("waited", "Queued for", "right"), ("ran", "Ran for", "right"),
+                    ("size", "File", "right"), ("tries", "Tries", "right")]
+            table = ui.table(columns=[{"name": k, "label": l, "field": k, "align": a} for k, l, a in cols],
+                             rows=[], row_key="n", pagination={"rowsPerPage": 10}).props(
+                "dense flat").classes("w-full edh-table")
+            table.add_slot("body-cell-state", '''
+                <q-td :props="props"><span :class="'edh-req-' + props.row.tone">{{ props.value }}</span></q-td>''')
+
+            async def load():
+                r = await call("job_requests", jid=jid)
+                if not r:
+                    return
+                live = last_jobs.get(jid) or s
+                rows = request_rows(r["requests"], live.get("activity") or {}, files_only)
+                tally: dict[str, int] = {}
+                for row in rows:
+                    key = row["state"].split(":")[0]
+                    key = "downloading" if key.startswith("downloading") else key
+                    tally[key] = tally.get(key, 0) + 1
+                summary_.text = f"{len(rows):,} request{'s' if len(rows) != 1 else ''} · " + " · ".join(
+                    f"{v:,} {k}" for k, v in tally.items())
+                table.rows = rows
+                table.update()
+                if not live.get("alive"):
+                    t.active = False
+
+            later(load)
+            t = ui.timer(3.0, load)
 
     def set_struct_src(jid, src):
         struct_states.setdefault(jid, {})["src"] = src
@@ -1870,6 +2293,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
         note = job_note(s, done, total) or forecast
         if note:
             ui.label(note).classes("text-body2 max-w-prose")
+        if s.get("alive"):
+            _job_activity(s, cds)
         if not s.get("alive") and st not in ("completed", "unreadable"):
             cost, short = job_resume_cost(s)
             if cost:
@@ -2028,7 +2453,14 @@ def build_page(be, local: bool = False, embedded: bool = False):
                             'flat round color=grey-6 aria-label="Delete record"').tooltip("Delete record")
                     if spec:
                         ui.button("Clone", icon="content_copy", on_click=lambda sp=spec: clone(sp)).props("flat no-caps")
+                    if is_cds(s) and spec:
+                        shown_r = d in open_reqs
+                        ui.button("Requests", icon="expand_less" if shown_r else "list",
+                                  on_click=lambda d=d: toggle_reqs(d)).props(
+                            f"flat no-caps aria-expanded={'true' if shown_r else 'false'}")
                     ui.button("Log", icon="article", on_click=lambda d=d: show_log(d)).props("flat no-caps")
+            if is_cds(s) and d in open_reqs:
+                _job_requests(s)
             if src and s["id"] in open_struct:
                 _job_structure(s, src)
         return live
@@ -2303,6 +2735,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
     # ------------------------------------------------------------------ start
     async def start():
+        render_flow()
         await refresh_keys_select()
         await load_collections()
 

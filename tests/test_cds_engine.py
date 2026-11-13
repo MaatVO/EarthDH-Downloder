@@ -280,3 +280,14 @@ def test_job_start_through_the_service(home, fast):
     assert r["pid"]
     with pytest.raises(ValueError, match="already"):
         service.job_start(dict(spec(home).to_dict()))
+
+
+def test_a_file_that_never_matches_its_checksum_stops_the_job(home, fast):
+    """Downloads that keep failing, also from new links, stop the job instead of fetching the file forever."""
+    fast.bad_checksum = True
+    job = create_job(spec(home))
+    assert run_foreground(job) == "failed"
+    st = runner.status(job)
+    assert "download failed" in st["error"] and "checksum mismatch" in st["error"]
+    gets = [c for c in fast.calls if c[0] == "POST" and c[1].endswith("/execution")]
+    assert len(gets) == 1 + cds_engine.RELINKS  # the first submission and the new links, no more

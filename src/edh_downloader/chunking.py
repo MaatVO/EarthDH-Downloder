@@ -106,9 +106,9 @@ def shard_shape(plan, vp, chunks: tuple, output) -> tuple | None:
     for d, c in zip(dims, chunks):
         if d == "valid_time":
             out.append(c * ft)
-        elif d in ("latitude", "point"):
+        elif d in ("latitude", "y", "point"):
             out.append(c * fy)
-        elif d == "longitude":
+        elif d in ("longitude", "x"):
             out.append(c * fx)
         else:
             out.append(c)
@@ -126,10 +126,11 @@ def suggest_shard_factors(plan, vp, chunks: tuple) -> tuple[int, int, int]:
     if "point" in ch:
         ny = math.ceil(size["point"] / ch["point"])
         return 1, int(_clamp(k, 1, ny)), 1
-    if "latitude" not in ch:
+    ylat, xlon = ("latitude", "longitude") if "latitude" in ch else ("y", "x")  # x/y: projected grids
+    if ylat not in ch or xlon not in ch:
         return 1, 1, 1
-    ny = math.ceil(size["latitude"] / ch["latitude"])
-    nx = math.ceil(size["longitude"] / ch["longitude"])
+    ny = math.ceil(size[ylat] / ch[ylat])
+    nx = math.ceil(size[xlon] / ch[xlon])
     side = int(math.sqrt(k))
     fy, fx = int(_clamp(side, 1, ny)), int(_clamp(side, 1, nx))
     ft = 1
@@ -183,7 +184,7 @@ def analyze(plan, vp=None) -> list[dict]:
         counts = {d: math.ceil(size[d] / c[d]) for d in dims}
         n_chunks = math.prod(counts.values())
         t_chunks = counts.get("valid_time", 1)
-        space_chunks = math.prod(v for d, v in counts.items() if d in ("latitude", "longitude", "point"))
+        space_chunks = math.prod(v for d, v in counts.items() if d in ("latitude", "longitude", "y", "x", "point"))
         ct = c.get("valid_time", 1)
         rows.append({
             "layout": lay, "title": TITLES[lay], "blurb": BLURB[lay],

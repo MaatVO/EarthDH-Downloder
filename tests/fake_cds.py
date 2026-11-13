@@ -111,6 +111,92 @@ def grib_result(dataset: str, inputs: dict) -> bytes:
     return out.getvalue()
 
 
+NC_VARS = {"near_surface_air_temperature": ("tas", 167, "Near-Surface Air Temperature", "K"),
+           "air_temperature": ("ta", 130, "Air Temperature", "K"),
+           "precipitation": ("pr", 228, "Precipitation", "kg m-2 s-1")}
+
+
+def nc_times(inputs: dict):
+    """The times a fake NetCDF result holds: mid-month (as CMIP6 stamps monthly means)."""
+    import pandas as pd
+
+    return [pd.Timestamp(f"{y}-{m}-15 12:00") for y in inputs["year"] for m in inputs.get("month") or ["01"]]
+
+
+def netcdf_result(dataset: str, inputs: dict, kind: str = "grid") -> bytes:
+    """A NetCDF result like the CDS's CMIP6 files: (time, [plev,] lat, lon), latitudes south to north, longitudes
+    0..360, a noleap calendar, time and latitude bounds. ``kind="stations"`` gives a station table instead (not a
+    grid: kept as files), ``"zip"`` the grid in a zip (with a README)."""
+    import io
+    import tempfile
+    import zipfile
+
+    import netCDF4
+    import numpy as np
+
+    n, w, s_, e = (float(x) for x in inputs.get("area") or (90, -180, -90, 180))
+    lat = np.arange(np.ceil(s_), np.floor(n) + 1, 1.0)
+    lon = np.arange(np.ceil(w), np.floor(e) + 1, 1.0) % 360
+    times = nc_times(inputs)
+    levels = [int(x) for x in inputs.get("level") or []] if isinstance(inputs.get("level"), list) else (
+        [int(inputs["level"])] if inputs.get("level") else [])
+    with tempfile.TemporaryDirectory() as tmp:
+        path = f"{tmp}/r.nc"
+        with netCDF4.Dataset(path, "w") as ds:
+            ds.createDimension("time", None)
+            ds.createDimension("bnds", 2)
+            t = ds.createVariable("time", "f8", ("time",))
+            t.units, t.calendar, t.standard_name, t.bounds = "days since 1850-01-01", "noleap", "time", "time_bnds"
+            t[:] = netCDF4.date2num([x.to_pydatetime() for x in times], t.units, t.calendar)
+            tb = ds.createVariable("time_bnds", "f8", ("time", "bnds"))
+            tb[:] = np.stack([t[:] - 14.5, t[:] + 14.5], axis=1)
+            if kind == "stations":
+                ds.createDimension("station", 3)
+                for nm, vals in (("lat", [45.0, 46.0, 47.0]), ("lon", [10.0, 11.0, 12.0])):
+                    v = ds.createVariable(nm, "f8", ("station",))
+                    v.units = "degrees_north" if nm == "lat" else "degrees_east"
+                    v[:] = vals
+                v = ds.createVariable("tas", "f4", ("time", "station"))
+                v[:] = np.ones((len(times), 3))
+            else:
+                ds.createDimension("lat", len(lat))
+                ds.createDimension("lon", len(lon))
+                for nm, vals, u in (("lat", lat, "degrees_north"), ("lon", lon, "degrees_east")):
+                    v = ds.createVariable(nm, "f8", (nm,))
+                    v.units, v.standard_name, v.bounds = u, "latitude" if nm == "lat" else "longitude", f"{nm}_bnds"
+                    v[:] = vals
+                    b = ds.createVariable(f"{nm}_bnds", "f8", (nm, "bnds"))
+                    b[:] = np.stack([vals - 0.5, vals + 0.5], axis=1)
+                dims = ("time", "lat", "lon")
+                if levels:
+                    ds.createDimension("plev", len(levels))
+                    pv = ds.createVariable("plev", "f8", ("plev",))
+                    pv.units, pv.standard_name, pv.positive = "Pa", "air_pressure", "down"
+                    pv[:] = np.array(levels) * 100.0
+                    dims = ("time", "plev", "lat", "lon")
+                name, param, long_name, units = NC_VARS[inputs["variable"] if isinstance(inputs["variable"], str)
+                                                        else inputs["variable"][0]]
+                v = ds.createVariable(name, "f4", dims, fill_value=np.float32(1e20))
+                v.long_name, v.units, v.standard_name = long_name, units, name
+                LAT, LON = np.meshgrid(lat, lon, indexing="ij")
+                for k, tt in enumerate(times):
+                    field = value(param, tt, LAT, LON)
+                    if levels:
+                        v[k] = np.stack([field + lev / 10000 for lev in levels])
+                    else:
+                        v[k] = field
+                if len(lat) and len(lon):  # one missing value: stays missing
+                    v[0, ..., 0, 0] = np.ma.masked
+        body = open(path, "rb").read()
+    if kind != "zip":
+        return body
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("README.txt", "a fake CMIP6 result")
+        z.writestr("data/tas_Amon_fake.nc", body)
+    return out.getvalue()
+
+
 def _canon(inputs: dict) -> str:
     def v(k, x):
         if isinstance(x, list):
@@ -150,6 +236,9 @@ class FakeCDS:
             self.file_size = 2000
             self.cost_factor = 1.0  # > 1: the server counts more fields than the client expects
             self.make_results = False  # True: results are real GRIB fields for the request (grib_result)
+            self.bad_checksum = False  # True: results announce a checksum no download matches
+            self.download_bps = 0  # > 0: result files are sent at this many bytes a second
+            self.netcdf_kind = "grid"  # NetCDF results (netcdf_result): "grid", "zip" or "stations"
 
     # ------------------------------------------------------------ helpers
     def _status(self, j: dict) -> str:
@@ -162,19 +251,22 @@ class FakeCDS:
             else:
                 j["status"] = "successful"
                 self._finish(j)
-            j["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            j["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
         elif now >= j["t"] + self.queue_delay:
             j["status"] = "running"
-            j.setdefault("started", time.strftime("%Y-%m-%dT%H:%M:%S"))
+            j.setdefault("started", time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()))
         return j["status"]
 
     def _finish(self, j: dict):
         key = j["canon"]
         if key not in self.cache:
             grib = j["inputs"].get("data_format") == "grib"
-            name = hashlib.sha1(key.encode()).hexdigest() + (".grib" if grib else ".nc")
+            zipped = not grib and self.netcdf_kind == "zip"
+            name = hashlib.sha1(key.encode()).hexdigest() + (".grib" if grib else ".zip" if zipped else ".nc")
             if self.make_results and grib:
                 body = grib_result(j["dataset"], j["inputs"])
+            elif self.make_results and j["dataset"] == "projections-cmip6":
+                body = netcdf_result(j["dataset"], j["inputs"], self.netcdf_kind)
             else:
                 body = (hashlib.sha256(key.encode()).digest() * (self.file_size // 32 + 1))[: self.file_size]
             self.files[name] = body
@@ -291,7 +383,7 @@ class FakeCDS:
                 self.submissions += 1
                 jid = str(uuid.uuid4())
                 j = {"id": jid, "dataset": req.match_info["id"], "inputs": inputs, "canon": canon,
-                     "t": time.monotonic(), "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "status": "accepted",
+                     "t": time.monotonic(), "created": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()), "status": "accepted",
                      "fail": THROTTLE_TEXT if status == "throttled" else
                      ("MARS returned no data" if canon in self.fail_requests else None)}
                 if status == "successful":
@@ -349,9 +441,11 @@ class FakeCDS:
                                                             "detail": f"results of job {j['id']} expired"}))
                 name = j["file"]
                 return web.json_response({"asset": {"value": {
-                    "type": "application/x-grib" if name.endswith(".grib") else "application/netcdf",
+                    "type": "application/x-grib" if name.endswith(".grib") else
+                    "application/zip" if name.endswith(".zip") else "application/netcdf",
                     "href": f"{self.url}/files/{name}",
-                    "file:checksum": hashlib.md5(self.files[name]).hexdigest(), "file:size": len(self.files[name]),
+                    "file:checksum": "0" * 32 if self.bad_checksum else hashlib.md5(self.files[name]).hexdigest(),
+                    "file:size": len(self.files[name]),
                     "file:local_path": f"s3://fake/{name}"}}})
 
         async def delete(req):
@@ -373,6 +467,8 @@ class FakeCDS:
             start = int(rng.split("=")[1].split("-")[0]) if rng else 0
             part = body[start:]
             resp = web.StreamResponse(status=206 if rng else 200)
+            if rng:  # as object stores answer a range: the client checks that it continues the partial file
+                resp.headers["Content-Range"] = f"bytes {start}-{len(body) - 1}/{len(body)}"
             resp.content_length = len(part)
             await resp.prepare(req)
             if self.truncate_next_download:
@@ -380,7 +476,12 @@ class FakeCDS:
                 await resp.write(part[: len(part) // 2])
                 req.transport.close()  # connection lost mid-file
                 return resp
-            await resp.write(part)
+            if self.download_bps:  # a slow link: the file arrives in pieces
+                for i in range(0, len(part), 1 << 16):
+                    await resp.write(part[i:i + (1 << 16)])
+                    await asyncio.sleep((1 << 16) / self.download_bps)
+            else:
+                await resp.write(part)
             await resp.write_eof()
             return resp
 
