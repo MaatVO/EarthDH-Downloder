@@ -1,0 +1,622 @@
+"""Run one Climate Data Store job (detached worker, like the Earth Data Hub engine).
+
+Pipeline:
+
+* a **ledger** (``requests.json`` in the job folder) records every planned request and what happened to it:
+  ``planned → submitting → queued → ready → downloaded → done``. It is written *before* each step, so a job
+  that is paused, killed or crashes never submits a request twice: queued requests are polled again on resume,
+  a submission cut short is found again on the CDS by its request, an expired result is requested again (often
+  served from the CDS cache);
+* a **queue** keeps up to ``max_inflight`` requests waiting or running on the CDS. When the CDS refuses more
+  (HTTP 429 or a "temporarily limited" failure) it halves that number and backs off; after a run of successes
+  it raises it again, up to the job's setting. All waiting requests are polled with one call, less often while
+  nothing changes;
+* results are **downloaded** as soon as they are ready (they expire after some days), resuming broken
+  downloads, into the spool (bounded by ``max_spool_gb``);
+* a **processor** thread waits until a unit's files are all there, decodes them message by message (one
+  variable and level at a time), cuts the area, aggregates time and commits the unit to Icechunk; then deletes
+  files no later unit needs. When every unit is committed the repository is exported to Zarr.
+
+Datasets that are not GRIB (NetCDF products, time series) are delivered as the files the CDS produces, in
+``<output>/<name>.files/``.
+"""
+
+import asyncio
+import json
+import os
+import shutil
+import signal
+import threading
+import time
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import zarr
+
+from ... import keys, store
+from ...aggregate import reduce_periods
+from ...engine import Engine, dir_bytes, now_iso
+from ...http import Fatal
+from ...job import JobSpec
+from ...util import human_bytes, read_json, write_json_atomic
+from .. import CDS
+from . import catalog, grib
+from .client import (AuthError, BadRequest, CDSClient, CDSError, JobFailed, NoSuchJob, ResultsExpired,
+                     Throttled, canonical, is_throttle)
+from .output import CdsOutput, Timeline
+from .planner import DEFAULT_LIMIT, CdsPlan
+
+MAX_ATTEMPTS = 3  # a request that fails this often (not because of a queue limit) stops the job
+POLL_MIN, POLL_MAX = 5.0, 120.0
+BACKOFF_MIN, BACKOFF_MAX = 60.0, 1800.0
+RAISE_AFTER = 3  # successes before one more request may wait on the CDS
+DOWNLOADS = 2  # result files downloaded at once
+RETRY_WAIT = 30.0  # seconds before a failed download is tried again
+
+
+class Ledger:
+    """Every request of the job and its state, saved atomically on each change."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.lock = threading.Lock()
+        d = read_json(path, {}, dict)
+        self.dataset = d.get("dataset")
+        self.entries: list[dict] = d.get("requests") or []
+
+    def init(self, dataset: str, requests: list) -> None:
+        self.dataset = dataset
+        self.entries = [{"index": r.index, "hash": r.hash, "inputs": r.inputs, "start": r.start, "end": r.end,
+                         "fields": r.fields, "variables": r.variables, "levels": r.levels,
+                         "bytes_est": r.bytes_est, "state": "planned", "job_id": None, "attempts": 0}
+                        for r in requests]
+        self.save()
+
+    def save(self) -> None:
+        with self.lock:
+            write_json_atomic(self.path, {"dataset": self.dataset, "requests": self.entries})
+
+    def set(self, e: dict, **kw) -> None:
+        with self.lock:
+            e.update(kw)
+        self.save()
+
+    def counts(self) -> dict:
+        out: dict[str, int] = {}
+        for e in self.entries:
+            out[e["state"]] = out.get(e["state"], 0) + 1
+        return out
+
+
+class CdsEngine(Engine):
+    """Same job folder, state, control, stop handling, export and finish as ``Engine``; another pipeline."""
+
+    def run(self) -> str:
+        spec = self.spec
+        self.save_state(status="starting", pid=os.getpid(), started_at=now_iso(), error=None, message="")
+        signal.signal(signal.SIGTERM, lambda *_: self.request_stop(self.control().get("action", "pause")))
+        signal.signal(signal.SIGINT, lambda *_: self.request_stop("pause"))
+        try:
+            if self.state.get("exported") and spec.zarr_path.exists():
+                if not spec.output.keep_icechunk:
+                    self._remove_icechunk()
+                self._done()
+                return "completed"
+            if spec.output.target_mode == "extend":
+                raise Fatal("extending an existing store is not available for Climate Data Store jobs yet")
+            self.key = keys.get_key(spec.download.key, CDS)
+            self.desc = catalog.describe(spec.dataset)
+            self.files_only = self.desc["tier"] != "grib"
+            self.ledger = Ledger(self.dir / "requests.json")
+            self.cds_plan = self._make_plan()
+            self.save_state(cds_tier=self.desc["tier"], requests_total=len(self.ledger.entries),
+                            plan=self.cds_plan.summary())
+            if self.files_only:
+                self.units, self.unit_need = [], {}
+            else:
+                tl = Timeline(self.cds_plan)
+                self.timeline = tl
+                self.units = tl.units
+                self.unit_need = {u.index: tl.unit_requests(u) for u in tl.units}
+                self.save_state(units_total=len(self.units))
+                self.output = CdsOutput.load(self.cds_plan, self.dir)
+                self.repo = store.open_repo(spec.icechunk_path) if self.output is not None else None
+                if self.output is not None and self.repo is None:
+                    raise Fatal(f"{spec.icechunk_path} is missing: the job cannot continue (delete it and start "
+                                "again)")
+                if self.output is None and spec.icechunk_path.exists() and any(spec.icechunk_path.iterdir()):
+                    raise Fatal(f"{spec.icechunk_path} exists and is not this job's repository; choose another "
+                                "output name")
+                self.plan = self.output
+            self.time_offset = 0
+            asyncio.run(self._pipeline())
+            if self.errors:
+                raise Fatal("; ".join(self.errors[:3]))
+            if self.stop_event.is_set() and not self._all_done():
+                status = {"cancel": "cancelled"}.get(self.stop_reason, "paused")
+                self.log.info(f"stopped ({status})")
+                self.save_state(status=status, pid=None, message=f"stopped: {self.stop_reason}")
+                return status
+            if self.files_only:
+                self._done_files()
+            else:
+                self._finish()
+            return "completed"
+        except Exception as e:  # noqa: BLE001
+            self.log.exception(f"job failed: {e}")
+            self.save_state(status="failed", pid=None, error=f"{type(e).__name__}: {e}")
+            return "failed"
+
+    # ---------------------------------------------------------------- plan and checks
+    def _make_plan(self) -> CdsPlan:
+        """The plan of the first run, kept in the ledger: a resumed job asks for exactly the same requests."""
+        spec, desc = self.spec, self.desc
+        table = catalog.constraints(spec.dataset)
+        limits = read_json(self._limits_path(), {}, dict)
+        plan = CdsPlan(spec, desc, table, limit=float(limits.get(spec.dataset) or DEFAULT_LIMIT))
+        for w in plan.warnings:
+            self.log.warning(w)
+        if self.ledger.entries:
+            from .planner import CdsRequest
+
+            plan.requests = [CdsRequest(e["index"], e["inputs"], e["hash"], e["start"], e["end"], e["fields"],
+                                        e["variables"], e["levels"], e.get("bytes_est")) for e in self.ledger.entries]
+            return plan
+        bad = plan.invalid()
+        if bad:
+            i, fields = next(iter(bad.items()))
+            raise Fatal(f"request {i + 1} asks for data the dataset does not have: "
+                        + "; ".join(f"{k} {v}" for k, v in fields.items()))
+        plan = asyncio.run(self._check_costs(plan, table, limits))
+        self.ledger.init(spec.dataset, plan.requests)
+        s = plan.summary()
+        self.log.info(f"plan: {s['requests']} request{'s' if s['requests'] != 1 else ''}, {s['fields']:,} fields"
+                      + (f", ~{human_bytes(s['download_bytes_est'])} to download" if s["download_bytes_est"] else ""))
+        return plan
+
+    def _limits_path(self) -> Path:
+        from ...paths import cache_dir
+
+        return cache_dir() / "cds_limits.json"
+
+    async def _check_costs(self, plan: CdsPlan, table, limits) -> CdsPlan:
+        spec = self.spec
+        async with CDSClient(self.key.secret, retries=3) as c:
+            if self.desc["licences"]:
+                have = await c.licences()
+                missing = [l for l in self.desc["licences"] if (l["id"], l["revision"]) not in have]
+                if missing:
+                    raise Fatal("accept the licence of this dataset first: "
+                                + ", ".join(l["label"] for l in missing)
+                                + f" (on https://cds.climate.copernicus.eu/datasets/{spec.dataset}, tab Download)")
+            biggest = max(plan.requests, key=lambda r: r.fields)
+            first = await c.costing(spec.dataset, biggest.inputs)
+            if first["limit"] and first["limit"] != plan.limit:
+                limits[spec.dataset] = first["limit"]
+                write_json_atomic(self._limits_path(), limits)
+                plan = CdsPlan(spec, self.desc, table, limit=first["limit"])
+            biggest = max(plan.requests, key=lambda r: r.fields)
+            cost = (await c.costing(spec.dataset, biggest.inputs))["cost"]
+            if cost > plan.limit:
+                plan = CdsPlan(spec, self.desc, table, limit=plan.limit * biggest.fields / cost)
+                plan.limit = first["limit"] or plan.limit
+        return plan
+
+    # ---------------------------------------------------------------- pipeline
+    def _all_done(self) -> bool:
+        if self.files_only:
+            return all(e["state"] in ("downloaded", "done") for e in self.ledger.entries)
+        return len(set(self.state["units_done"])) >= len(self.units)
+
+    def _needed(self) -> list[dict]:
+        """Requests some unfinished unit still needs (all of them for a files-only job)."""
+        if self.files_only:
+            return [e for e in self.ledger.entries if e["state"] not in ("downloaded", "done")]
+        done = set(self.state["units_done"])
+        want = sorted({r for u in self.units if u.index not in done for r in self.unit_need[u.index]})
+        return [self.ledger.entries[i] for i in want]
+
+    def _file_for(self, e: dict) -> Path:
+        if self.files_only:
+            return self.files_dir() / self._file_name(e)
+        return self.spool_dir() / f"{e['index']:05d}-{e['hash']}.grib"
+
+    def _file_name(self, e: dict) -> str:
+        ext = {"application/x-grib": "grib", "application/netcdf": "nc", "application/x-netcdf": "nc",
+               "application/zip": "zip", "text/csv": "csv"}.get(e.get("type") or "", None)
+        if not ext:
+            ext = (e.get("href") or "").rsplit(".", 1)[-1] if "." in (e.get("href") or "")[-6:] else "bin"
+        return f"{self.spec.output.name}_{e['index'] + 1:04d}_{e['start'][:10]}_{e['end'][:10]}.{ext}"
+
+    def files_dir(self) -> Path:
+        return self.spec.output_dir / f"{self.spec.output.name}.files"
+
+    async def _pipeline(self):
+        spec = self.spec
+        led = self.ledger
+        loop = asyncio.get_running_loop()
+        self.spool_dir().mkdir(parents=True, exist_ok=True)
+        if self.files_only:
+            self.files_dir().mkdir(parents=True, exist_ok=True)
+        # files that should be there: check them (a crash can leave anything behind)
+        for e in led.entries:
+            if e["state"] == "downloaded":
+                f = Path(e.get("file") or "")
+                if not (f.exists() and (e.get("size") is None or f.stat().st_size == e["size"])):
+                    led.set(e, state="ready" if e.get("href") else "planned", file=None)
+        done_units = set(self.state["units_done"])
+        todo = [u for u in self.units if u.index not in done_units]
+        ready = {u.index: threading.Event() for u in todo}
+        wake = asyncio.Event()  # something changed: the queue loop looks again at once
+        stop_async = asyncio.Event()
+        stats = {"bytes": 0, "submitted": 0}
+        processed = {"n": len(done_units), "current": None}
+
+        def check_ready():
+            for u in todo:
+                if not ready[u.index].is_set() and all(
+                        led.entries[r]["state"] in ("downloaded", "done") for r in self.unit_need[u.index]):
+                    ready[u.index].set()
+
+        check_ready()
+
+        # ---------- processor thread
+        def processor():
+            try:
+                for u in todo:
+                    while not ready[u.index].wait(1):
+                        if self.stop_event.is_set():
+                            return
+                    if self.stop_event.is_set():
+                        return
+                    processed["current"] = u.index
+                    t0 = time.time()
+                    self._process_unit(u)
+                    with self._state_lock:
+                        self.state["units_done"].append(u.index)
+                    processed["n"] += 1
+                    self.save_state()
+                    later = {r for v in todo if v.index > u.index for r in self.unit_need[v.index]}
+                    for r in self.unit_need[u.index]:
+                        if r not in later:
+                            e = led.entries[r]
+                            Path(e.get("file") or "").unlink(missing_ok=True)
+                            led.set(e, state="done", file=None)
+                    self.log.info(f"unit {u.index + 1}/{len(self.units)} committed "
+                                  f"({self.output.labels[u.k0]} .. {self.output.labels[u.k1 - 1]}) "
+                                  f"in {time.time() - t0:.1f}s")
+            except Exception as e:  # noqa: BLE001
+                self.log.exception(f"processing failed: {e}")
+                self.errors.append(f"processing: {type(e).__name__}: {e}")
+                self.request_stop("error")
+            finally:
+                loop.call_soon_threadsafe(stop_async.set)
+                loop.call_soon_threadsafe(wake.set)
+
+        proc = None
+        if not self.files_only and todo:
+            proc = threading.Thread(target=processor, name="processor", daemon=True)
+            proc.start()
+
+        # ---------- queue
+        ctl_cap = lambda: max(1, int(self.control().get("max_inflight") or spec.cds.max_inflight))  # noqa: E731
+        q = {"cap": ctl_cap(), "backoff_until": 0.0, "backoff": BACKOFF_MIN, "streak": 0, "poll": POLL_MIN,
+             "downloading": set()}
+
+        def throttle(why: str):
+            active = sum(1 for e in led.entries if e["state"] == "queued")
+            q["cap"] = max(1, min(q["cap"], max(1, active)) // 2)
+            q["backoff_until"] = time.time() + q["backoff"]
+            self.log.warning(f"the CDS limits requests for now ({why}); at most {q['cap']} waiting, "
+                             f"next submission in {q['backoff']:.0f}s")
+            q["backoff"] = min(BACKOFF_MAX, q["backoff"] * 2)
+            q["streak"] = 0
+
+        def fatal(msg: str):
+            self.log.error(msg)
+            self.errors.append(msg)
+            self.request_stop("error")
+
+        async def reconcile(c: CDSClient):
+            """A submission cut short (crash between the POST and the ledger): find the job on the CDS."""
+            pending = [e for e in led.entries if e["state"] == "submitting"]
+            if not pending:
+                return
+            jobs = await c.jobs(limit=100, max_pages=2)
+            known = {e["job_id"] for e in led.entries if e.get("job_id")}
+            for e in pending:
+                found = None
+                for j in jobs:
+                    if j.get("processID") != led.dataset or j["jobID"] in known:
+                        continue
+                    try:
+                        full = await c.job(j["jobID"], request=True)
+                    except CDSError:
+                        continue
+                    ids = ((full.get("metadata") or {}).get("request") or {}).get("ids") or {}
+                    if canonical(ids) == e["inputs"]:
+                        found = j["jobID"]
+                        break
+                if found:
+                    known.add(found)
+                    led.set(e, state="queued", job_id=found)
+                    self.log.info(f"request {e['index'] + 1}: found the submission of the last run ({found[:8]})")
+                else:
+                    led.set(e, state="planned", job_id=None)
+
+        async def poll(c: CDSClient) -> bool:
+            queued = [e for e in self._needed() if e["state"] == "queued" and e.get("job_id")]
+            if not queued:
+                return False
+            st = await c.statuses([e["job_id"] for e in queued])
+            changed = False
+            for e in queued:
+                j = st.get(e["job_id"])
+                if j is None:  # dismissed on the CDS (or unknown): ask again
+                    self.log.warning(f"request {e['index'] + 1}: job {e['job_id'][:8]} is gone on the CDS; "
+                                     "submitting it again")
+                    led.set(e, state="planned", job_id=None)
+                    changed = True
+                    continue
+                status = j.get("status")
+                if status != e.get("status"):
+                    led.set(e, status=status, started=j.get("started"))
+                    changed = True
+                if status == "successful":
+                    try:
+                        res = await c.results(e["job_id"])
+                    except ResultsExpired:
+                        led.set(e, state="planned", job_id=None)
+                        continue
+                    except JobFailed as err:
+                        await failed(c, e, str(err))
+                        continue
+                    led.set(e, state="ready", href=res["href"], size=res.get("file:size"), type=res.get("type"),
+                            finished=j.get("finished") or now_iso())
+                    q["streak"] += 1
+                    self.log.info(f"request {e['index'] + 1}/{len(led.entries)} ready "
+                                  f"({human_bytes(res.get('file:size') or 0)})")
+                elif status in ("failed", "rejected"):
+                    await failed(c, e, await c.failure(e["job_id"]))
+            return changed
+
+        async def failed(c, e, why: str):
+            if is_throttle(why):
+                led.set(e, state="planned", job_id=None, status=None)
+                throttle(why[:120])
+                return
+            n = e.get("attempts", 0) + 1
+            if n >= MAX_ATTEMPTS:
+                led.set(e, state="failed", attempts=n, error=why[:500])
+                fatal(f"request {e['index'] + 1} failed {n} times on the CDS: {why[:300]}")
+            else:
+                led.set(e, state="planned", job_id=None, status=None, attempts=n, error=why[:500])
+                self.log.warning(f"request {e['index'] + 1} failed on the CDS ({why[:200]}); trying again")
+
+        def spool_full() -> bool:
+            if self.files_only:
+                return False
+            pending = sum((e.get("size") or e.get("bytes_est") or 0) for e in led.entries
+                          if e["state"] in ("queued", "ready", "downloaded"))
+            return pending >= spec.download.max_spool_gb * 1e9
+
+        async def submit(c: CDSClient) -> bool:
+            if time.time() < q["backoff_until"] or self.stop_event.is_set():
+                return False
+            if q["streak"] >= RAISE_AFTER and q["cap"] < ctl_cap():
+                q["cap"] += 1
+                q["streak"] = 0
+                q["backoff"] = BACKOFF_MIN
+            q["cap"] = min(q["cap"], ctl_cap())
+            active = sum(1 for e in led.entries if e["state"] == "queued")
+            changed = False
+            for e in self._needed():
+                if active >= q["cap"]:
+                    break
+                if e["state"] != "planned":
+                    continue
+                if active and spool_full():
+                    break
+                led.set(e, state="submitting", submitted_at=now_iso())
+                try:
+                    j = await c.submit(led.dataset, e["inputs"])
+                except Throttled as err:
+                    led.set(e, state="planned")
+                    throttle(str(err)[:120])
+                    break
+                except BadRequest as err:
+                    led.set(e, state="failed", error=str(err)[:500])
+                    fatal(f"request {e['index'] + 1} refused by the CDS: {err}")
+                    break
+                led.set(e, state="queued", job_id=j["jobID"], status=j.get("status"))
+                stats["submitted"] += 1
+                active += 1
+                changed = True
+                self.log.info(f"request {e['index'] + 1}/{len(led.entries)} submitted "
+                              f"({e['start'][:10]} .. {e['end'][:10]}, {e['fields']:,} fields)"
+                              + (": served from the CDS cache" if j.get("status") == "successful" else ""))
+            return changed
+
+        async def download(c: CDSClient, e: dict):
+            try:
+                dest = self._file_for(e)
+                n = await c.download(e["href"], dest, e.get("size"),
+                                     progress=lambda k: stats.__setitem__("bytes", stats["bytes"] + k))
+                led.set(e, state="downloaded", file=str(dest), downloaded_at=now_iso())
+                self.log.info(f"request {e['index'] + 1}: downloaded {human_bytes(n)}")
+                await loop.run_in_executor(None, check_ready)
+            except ResultsExpired:
+                self.log.warning(f"request {e['index'] + 1}: the result expired; asking for it again")
+                led.set(e, state="planned", job_id=None, href=None)
+            except CDSError as err:
+                self.log.warning(f"request {e['index'] + 1}: download failed ({err}); trying again")
+                await asyncio.sleep(RETRY_WAIT)
+            finally:
+                q["downloading"].discard(e["index"])
+                wake.set()
+
+        async def cancel_remote(c: CDSClient):
+            for e in led.entries:
+                if e["state"] == "queued" and e.get("job_id"):
+                    try:
+                        await c.delete(e["job_id"])
+                    except CDSError:
+                        pass
+                    led.set(e, state="planned", job_id=None, status=None)
+
+        def progress():
+            counts = led.counts()
+            now = pd.Timestamp.now(tz="UTC").tz_localize(None)
+            waits = [(now - pd.Timestamp(e["submitted_at"]).tz_localize(None)).total_seconds()
+                     for e in led.entries if e["state"] == "queued" and e.get("submitted_at")
+                     and e.get("status") in (None, "accepted")]
+            running = sum(1 for e in led.entries if e["state"] == "queued" and e.get("status") == "running")
+            waiting = counts.get("queued", 0) - running
+            n_units = len(self.units)
+            if self.files_only:
+                got = counts.get("downloaded", 0) + counts.get("done", 0)
+                msg = f"{got}/{len(led.entries)} files downloaded"
+            else:
+                msg = f"{processed['n']}/{n_units} units committed"
+            msg += f" · {waiting} waiting on the CDS, {running} running" if waiting or running else ""
+            if time.time() < q["backoff_until"]:
+                msg += f" · CDS limit: next submission in {q['backoff_until'] - time.time():.0f}s"
+            self.save_state(status="running", cds_requests=counts, cds_waiting=waiting, cds_running=running,
+                            cds_inflight_cap=q["cap"], cds_oldest_wait_s=max(waits) if waits else None,
+                            units_processed=processed["n"], bytes_run=stats["bytes"],
+                            requests_run=stats["submitted"], spool_bytes=dir_bytes(self.spool_dir()),
+                            message=msg)
+
+        async def queue_loop():
+            async with CDSClient(self.key.secret, retries=4) as c:
+                try:
+                    await reconcile(c)
+                    while not self.stop_event.is_set():
+                        if self._all_done() and not q["downloading"]:
+                            break
+                        if stop_async.is_set() and (proc is None or not proc.is_alive()):
+                            break  # the processor ended (all committed, or an error)
+                        changed = await poll(c)
+                        changed |= await submit(c)
+                        for e in self._needed():
+                            if (e["state"] == "ready" and e["index"] not in q["downloading"]
+                                    and len(q["downloading"]) < DOWNLOADS):
+                                q["downloading"].add(e["index"])
+                                asyncio.create_task(download(c, e))
+                                changed = True
+                        progress()
+                        q["poll"] = POLL_MIN if changed else min(POLL_MAX, q["poll"] * 1.5)
+                        wake.clear()
+                        try:
+                            await asyncio.wait_for(wake.wait(), timeout=q["poll"])
+                        except asyncio.TimeoutError:
+                            pass
+                    while q["downloading"]:
+                        await asyncio.sleep(0.2)
+                    if self.stop_reason == "cancel":
+                        await cancel_remote(c)
+                except AuthError as e:
+                    fatal(str(e))
+                except Exception as e:  # noqa: BLE001  (the queue must never die silently)
+                    self.log.exception(f"queue failed: {e}")
+                    fatal(f"queue: {type(e).__name__}: {e}")
+                finally:
+                    if proc is None:
+                        stop_async.set()
+
+        async def watch_stop():
+            while not self.stop_event.is_set() and not stop_async.is_set():
+                await asyncio.sleep(0.5)
+            wake.set()
+
+        ws = asyncio.create_task(watch_stop())
+        await queue_loop()
+        if proc is not None:
+            await loop.run_in_executor(None, proc.join)
+        ws.cancel()
+        self.state["requests_job"] = self.state.get("requests_job", 0) + stats["submitted"]
+        self.state["bytes_job"] = self.state.get("bytes_job", 0) + stats["bytes"]
+        self.save_state(cds_requests=led.counts(), cds_waiting=0, cds_running=0, cds_oldest_wait_s=None)
+
+    # ---------------------------------------------------------------- processing
+    def _ensure_output(self, files: list[Path]):
+        """The layout, from the first unit's files: the grid, and one output variable per GRIB parameter."""
+        if self.output is not None:
+            return
+        msgs = [m for f in files for m in grib.index(f)]
+        if not msgs:
+            raise Fatal("the first result file holds no GRIB fields")
+        g = grib.grid(files[0], msgs[0])
+        variables = CdsOutput.describe_variables(msgs, self.cds_plan)
+        unmatched = [v for v in self.cds_plan.variables if v not in {x.get("form_name") for x in variables}]
+        if unmatched and any(self.spec.time.stats.get(v) for v in unmatched):
+            self.log.warning(f"could not tell which GRIB field is {', '.join(unmatched)}: their statistics use "
+                             "the default (sum for accumulations, mean otherwise)")
+        out = CdsOutput(self.cds_plan, g, variables)
+        out.save(self.dir, variables)
+        for w in out.warnings:
+            if w not in self.cds_plan.warnings:
+                self.log.warning(w)
+        self.log.info("output variables: " + ", ".join(f"{v['name']} ({v.get('form_name') or v['long_name']})"
+                                                       for v in variables))
+        self.log.info(f"creating Icechunk repository {self.spec.icechunk_path}")
+        self.repo = store.create_repo(self.spec.icechunk_path, out, self.job_id)
+        self.output = self.plan = out
+
+    def _process_unit(self, u):
+        led = self.ledger
+        files = [Path(led.entries[r]["file"]) for r in self.unit_need[u.index]]
+        self._ensure_output(files)
+        out = self.output
+        steps = out.instants[u.s:u.e]
+        tidx = {pd.Timestamp(t): i for i, t in enumerate(steps)}
+        starts = out.p_start[u.k0:u.k1] - u.s
+        groups: dict[tuple, list] = {}
+        for f in files:
+            for m in grib.index(f):
+                if pd.Timestamp(m.valid) in tidx:
+                    groups.setdefault((m.param, float(m.level)), []).append((f, m))
+        keepbits = self.spec.output.keepbits
+        session = self.repo.writable_session("main")
+        g = zarr.open_group(session.store, mode="r+")
+        readers = {f: grib.Reader(f) for f in files}
+        try:
+            for vp in out.vars:
+                levels = out.level_values if vp.var.kind == "level" else [None]
+                for li, lev in enumerate(levels):
+                    if lev is None:
+                        msgs = [x for (p, _), xs in groups.items() if p == vp.var.param for x in xs]
+                    else:
+                        msgs = groups.get((vp.var.param, float(lev)), [])
+                    if not msgs:
+                        self.log.warning(f"no data for {vp.var.name}" + (f" at {lev}" if lev is not None else "")
+                                         + f" in {steps[0]} .. {steps[-1]}")
+                        continue
+                    nj, ni = msgs[0][1].nj, msgs[0][1].ni
+                    slab = np.full((len(steps), nj, ni), np.nan, dtype=np.float32)
+                    for f, m in msgs:
+                        slab[tidx[pd.Timestamp(m.valid)]] = readers[f].read(m)
+                    cut = out.cut(slab)
+                    del slab
+                    lpos = () if lev is None else (li,)
+                    tsl = (slice(u.k0, u.k1),)
+                    space = (slice(None),) * len(out.shape_space)
+                    for stat, name in zip(vp.stats, vp.out_names):
+                        g[name][(*tsl, *lpos, *space)] = self._encode(reduce_periods(cut, starts, stat), keepbits)
+        finally:
+            for r in readers.values():
+                r.close()
+        session.commit(f"unit {u.index}: {out.labels[u.k0]} .. {out.labels[u.k1 - 1]}", metadata={"unit": u.index})
+
+    # ---------------------------------------------------------------- files-only jobs
+    def _done_files(self):
+        d = self.files_dir()
+        manifest = [{"file": Path(e["file"]).name, "request": e["inputs"], "start": e["start"], "end": e["end"],
+                     "size": e.get("size")} for e in self.ledger.entries if e.get("file")]
+        write_json_atomic(d / "manifest.json", {"dataset": self.spec.dataset, "job": self.job_id,
+                                                "files": manifest, "source": CdsOutput.provider})
+        shutil.rmtree(self.spool_dir(), ignore_errors=True)
+        self.save_state(status="completed", pid=None, finished_at=now_iso(), message="done", outputs=[str(d)],
+                        output_bytes=dir_bytes(d), eta_s=0)
+        self.log.info(f"completed: {len(manifest)} files in {d}")

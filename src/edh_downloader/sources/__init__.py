@@ -37,7 +37,7 @@ SOURCES: dict[str, SourceInfo] = {
         id=CDS, title="Copernicus Climate Data Store", short="CDS",
         key_url="https://cds.climate.copernicus.eu/profile",
         key_hint="`~/.cdsapirc` (the file the `cdsapi` package uses) is used automatically.",
-        has_quota=False, check_cost="free", jobs=False,
+        has_quota=False, check_cost="free", jobs=True,
     ),
 }
 

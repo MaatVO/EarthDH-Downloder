@@ -18,6 +18,99 @@ TOKEN = "cds-test-token"
 THROTTLE_TEXT = "Number of API queued requests for this dataset is temporarily limited"
 
 
+PARAMS = {"2m_temperature": 167, "total_precipitation": 228, "10m_u_component_of_wind": 165,
+          "10m_v_component_of_wind": 166, "surface_pressure": 134, "temperature": 130, "geopotential": 129,
+          "u_component_of_wind": 131}
+LAMBERT = {"Nx": 6, "Ny": 5, "latitudeOfFirstGridPointInDegrees": 40.0, "longitudeOfFirstGridPointInDegrees": 0.0,
+           "LaDInDegrees": 50.0, "LoVInDegrees": 8.0, "Latin1InDegrees": 50.0, "Latin2InDegrees": 50.0,
+           "DxInMetres": 100000, "DyInMetres": 100000}
+
+
+def value(param: int, valid, lat, lon):
+    """The value the fake CDS delivers for a parameter at a time and place (tests compute it back)."""
+    import numpy as np
+    import pandas as pd
+
+    hours = (pd.Timestamp(valid) - pd.Timestamp("2020-01-01")) / pd.Timedelta(hours=1)
+    return (param % 100) + hours / 100 + np.asarray(lat) / 10 + np.asarray(lon) / 1000
+
+
+def grib_result(dataset: str, inputs: dict) -> bytes:
+    """GRIB fields for a request: every real date × time × variable × level, on the requested area and grid
+    (regular datasets) or a small Lambert grid (CERRA)."""
+    import calendar
+    import io
+
+    import eccodes as ec
+    import numpy as np
+    import pandas as pd
+
+    lambert = dataset.startswith("reanalysis-cerra")
+    if not lambert:
+        dx = dy = 0.25
+        if inputs.get("grid"):
+            dx, dy = (float(x) for x in str(inputs["grid"]).split("/"))
+        n, w, s_, e = (float(x) for x in inputs.get("area") or (90, 0, -90, 359.75))
+        lat = np.round(n - np.arange(int(round((n - s_) / dy)) + 1) * dy, 6)
+        lon = np.round(w + np.arange(int(round((e - w) / dx)) + 1) * dx, 6)
+        LAT, LON = np.meshgrid(lat, lon, indexing="ij")
+    levels = inputs.get("pressure_level") or [None]
+    out = io.BytesIO()
+    times = inputs.get("time") or ["00:00"]
+    for y in inputs["year"]:
+        for m in inputs.get("month") or ["01"]:
+            last = calendar.monthrange(int(y), int(m))[1]
+            for d in inputs.get("day") or ["01"]:
+                if int(d) > last:
+                    continue
+                for t in times:
+                    valid = pd.Timestamp(f"{y}-{m}-{d} {t}")
+                    for var in inputs["variable"]:
+                        param = PARAMS[var]
+                        for lev in levels:
+                            if lambert:
+                                h = ec.codes_grib_new_from_samples("GRIB2")
+                                ec.codes_set(h, "gridType", "lambert")
+                                for k, v in LAMBERT.items():
+                                    ec.codes_set(h, k, v)
+                                ec.codes_set(h, "typeOfFirstFixedSurface", 103)
+                                ec.codes_set(h, "scaledValueOfFirstFixedSurface", 2)
+                            else:
+                                h = ec.codes_grib_new_from_samples("regular_ll_sfc_grib1")
+                                ec.codes_set(h, "centre", 98)
+                                for k, v in (("Ni", len(lon)), ("Nj", len(lat)),
+                                             ("latitudeOfFirstGridPointInDegrees", float(lat[0])),
+                                             ("longitudeOfFirstGridPointInDegrees", float(lon[0])),
+                                             ("latitudeOfLastGridPointInDegrees", float(lat[-1])),
+                                             ("longitudeOfLastGridPointInDegrees", float(lon[-1])),
+                                             ("iDirectionIncrementInDegrees", dx),
+                                             ("jDirectionIncrementInDegrees", dy)):
+                                    ec.codes_set(h, k, v)
+                            ec.codes_set(h, "paramId", param)
+                            if lev is not None:
+                                ec.codes_set(h, "typeOfLevel", "isobaricInhPa")
+                                ec.codes_set(h, "level", int(lev))
+                            if param == 228:  # accumulation over the hour ending at the valid time
+                                start = valid - pd.Timedelta(hours=1)
+                                ec.codes_set(h, "stepType", "accum")
+                                ec.codes_set(h, "startStep", 0)
+                                ec.codes_set(h, "endStep", 1)
+                            else:
+                                start = valid
+                            ec.codes_set(h, "dataDate", int(start.strftime("%Y%m%d")))
+                            ec.codes_set(h, "dataTime", int(start.strftime("%H%M")))
+                            ec.codes_set(h, "bitsPerValue", 24)
+                            if lambert:
+                                vals = np.arange(30, dtype=float) + param % 100 + \
+                                    (valid - pd.Timestamp("2020-01-01")) / pd.Timedelta(hours=1) / 100
+                            else:
+                                vals = value(param, valid, LAT, LON).ravel() + (0 if lev is None else int(lev) / 10000)
+                            ec.codes_set_values(h, vals)
+                            out.write(ec.codes_get_message(h))
+                            ec.codes_release(h)
+    return out.getvalue()
+
+
 def _canon(inputs: dict) -> str:
     def v(k, x):
         if isinstance(x, list):
@@ -56,6 +149,7 @@ class FakeCDS:
             self.limits = {"reanalysis-era5-pressure-levels": 60000.0, "reanalysis-cerra-single-levels": 90000.0}
             self.file_size = 2000
             self.cost_factor = 1.0  # > 1: the server counts more fields than the client expects
+            self.make_results = False  # True: results are real GRIB fields for the request (grib_result)
 
     # ------------------------------------------------------------ helpers
     def _status(self, j: dict) -> str:
@@ -77,8 +171,12 @@ class FakeCDS:
     def _finish(self, j: dict):
         key = j["canon"]
         if key not in self.cache:
-            name = hashlib.sha1(key.encode()).hexdigest() + ".grib"
-            body = (hashlib.sha256(key.encode()).digest() * (self.file_size // 32 + 1))[: self.file_size]
+            grib = j["inputs"].get("data_format") == "grib"
+            name = hashlib.sha1(key.encode()).hexdigest() + (".grib" if grib else ".nc")
+            if self.make_results and grib:
+                body = grib_result(j["dataset"], j["inputs"])
+            else:
+                body = (hashlib.sha256(key.encode()).digest() * (self.file_size // 32 + 1))[: self.file_size]
             self.files[name] = body
             self.cache[key] = name
         j["file"] = self.cache[key]
@@ -251,7 +349,8 @@ class FakeCDS:
                                                             "detail": f"results of job {j['id']} expired"}))
                 name = j["file"]
                 return web.json_response({"asset": {"value": {
-                    "type": "application/x-grib", "href": f"{self.url}/files/{name}",
+                    "type": "application/x-grib" if name.endswith(".grib") else "application/netcdf",
+                    "href": f"{self.url}/files/{name}",
                     "file:checksum": hashlib.md5(self.files[name]).hexdigest(), "file:size": len(self.files[name]),
                     "file:local_path": f"s3://fake/{name}"}}})
 

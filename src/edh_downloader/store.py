@@ -38,7 +38,7 @@ def compressors(o) -> list:
 def _clip(v, lo, hi):
     return max(lo, min(hi, v))
 KEEP_ATTRS = ("long_name", "units", "standard_name", "GRIB_paramId", "GRIB_shortName", "GRIB_cfVarName",
-              "GRIB_stepType", "GRIB_typeOfLevel", "GRIB_name")
+              "GRIB_stepType", "GRIB_typeOfLevel", "GRIB_name", "cds_variable")
 CELL = {"hours": "{h} hours", "day": "1 day", "month": "1 month", "year": "1 year"}
 
 
@@ -63,11 +63,11 @@ def root_attrs(plan: Plan, job_id: str, status: str = "incomplete", extra: dict 
         "title": f"{ds.info.get('title', spec.dataset)} - subset",
         "source": ds.url,
         "source_dataset": spec.dataset,
-        "source_collection": spec.collection,
+        "source_collection": spec.collection if spec.source == "edh" else spec.source,
         "source_updated": ds.info.get("updated", ""),
         "source_institution": ds.meta.attrs.get("institution", ""),
-        "provider": "Earth Data Hub (https://earthdatahub.destine.eu)",
-        "license": "CC-BY-4.0 (Copernicus ERA5; see the source dataset)",
+        "provider": getattr(plan, "provider", "Earth Data Hub (https://earthdatahub.destine.eu)"),
+        "license": getattr(plan, "license", "CC-BY-4.0 (Copernicus ERA5; see the source dataset)"),
         "Conventions": "CF-1.8",
         "edh_job_id": job_id,
         "edh_status": status,
@@ -116,9 +116,10 @@ def _write_layout(g: zarr.Group, plan: Plan) -> None:
     if plan.has_levels:
         lv = np.asarray(plan.level_values)
         name = plan.ds.meta.level_dim
+        level_attrs = {"units": "hPa", "long_name": "pressure level", "positive": "down"} \
+            if name == "isobaricInhPa" else {"long_name": name}
         a = g.create_array(name, shape=lv.shape, dtype=lv.dtype, chunks=lv.shape, dimension_names=[name],
-                           attributes={"units": "hPa", "long_name": "pressure level", "positive": "down"},
-                           fill_value=0)
+                           attributes=level_attrs, fill_value=0)
         a[:] = lv
     lat_attrs = {"units": "degrees_north", "standard_name": "latitude", "long_name": "latitude"}
     lon_attrs = {"units": "degrees_east", "standard_name": "longitude", "long_name": "longitude"}
@@ -138,6 +139,18 @@ def _write_layout(g: zarr.Group, plan: Plan) -> None:
                                fill_value=np.nan)
             a[:] = np.asarray(vals, dtype="f8")
         coords = "latitude longitude point_name requested_latitude requested_longitude"
+    elif getattr(plan, "curvilinear", False):  # projected grid (CERRA, CARRA): 2-D coordinates over (y, x)
+        ny, nx = plan.shape_space
+        for nm, n in (("y", ny), ("x", nx)):
+            a = g.create_array(nm, shape=(n,), dtype="i4", chunks=(n,), dimension_names=[nm], fill_value=0,
+                               attributes={"long_name": f"{nm} index of the source grid"})
+            a[:] = np.arange(n)
+        grid_attrs = {f"grid_{k}": v for k, v in (getattr(plan.grid, "attrs", None) or {}).items()}
+        for nm, vals, at in (("latitude", plan.out_lat, lat_attrs), ("longitude", plan.out_lon, lon_attrs)):
+            a = g.create_array(nm, shape=vals.shape, dtype="f8", chunks=vals.shape, dimension_names=["y", "x"],
+                               attributes=dict(at, **grid_attrs), fill_value=np.nan)
+            a[:] = vals
+        coords = "latitude longitude"
     else:
         for nm, vals, at in (("latitude", plan.out_lat, lat_attrs), ("longitude", plan.out_lon, lon_attrs)):
             a = g.create_array(nm, shape=vals.shape, dtype="f8", chunks=vals.shape, dimension_names=[nm],

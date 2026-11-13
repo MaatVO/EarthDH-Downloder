@@ -113,12 +113,13 @@ def test_jobs_without_a_source_are_earth_data_hub():
     assert (s2.source, s2.cds.grid, s2.cds.options) == ("cds", [1.0, 1.0], {"a": 1})
 
 
-def test_this_version_does_not_start_cds_jobs(home):
-    keys.add_key("c", "tok", provider="cds")
+def test_a_cds_job_needs_a_cds_key(home):
     spec = JobSpec(source="cds", variables=["2m_temperature"], dataset="reanalysis-era5-single-levels")
     spec.output.directory = str(home / "out")
-    spec.download.key = "c"
-    with pytest.raises(ValueError, match="not available"):
+    with pytest.raises(ValueError, match="no Copernicus Climate Data Store API key"):
+        service.job_start(spec.to_dict())
+    spec.download.key = "test"  # an Earth Data Hub key
+    with pytest.raises(ValueError, match="Earth Data Hub key"):
         service.job_start(spec.to_dict())
     with pytest.raises(ValueError, match="unknown data source"):
         sources.get("nope")

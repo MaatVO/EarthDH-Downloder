@@ -38,6 +38,12 @@ def _lon180(lon: float) -> float:
     return lon if -180 <= lon <= 180 else round(((lon + 180) % 360) - 180, 6)
 
 
+def _num(x: float):
+    """A coordinate as the CDS form writes it: 47 rather than 47.0 (the same request, the same cache entry)."""
+    x = round(float(x), 6)
+    return int(x) if x.is_integer() else x
+
+
 def _level_str(v) -> str:
     f = float(v)
     return str(int(f)) if f.is_integer() else str(v)
@@ -137,6 +143,8 @@ class CdsPlan:
             n = o["name"]
             v = chosen.pop(n, None)
             if v in (None, [], ""):
+                if not self._needed(n, chosen):  # a default for another kind of request (soil layer, lead time)
+                    continue
                 v = o["default"] or (o["values"][:1] if len(o["values"]) == 1 else [])
             if v in (None, [], ""):
                 if o["required"] and self._needed(n, chosen):
@@ -202,7 +210,18 @@ class CdsPlan:
         else:
             raise PlanError(f"unknown area mode {a.mode}")
         if box is not None and d.get("area") is not None:
-            self.area = [round(box[0], 6), round(box[1], 6), round(box[2], 6), round(box[3], 6)]
+            # on the grid, as the CDS does: inward for a box (only the points inside it), outward around points
+            sy, sx = (float(grid[0]), float(grid[-1])) if grid else (native[0] or 0, native[1] or 0)
+            if sy and sx:
+                inward = a.mode == "bbox"
+                lo, hi = (math.ceil, math.floor) if inward else (math.floor, math.ceil)
+                box = (hi(box[0] / sy + 1e-9) * sy if inward else hi(box[0] / sy - 1e-9) * sy,
+                       lo(box[1] / sx - 1e-9) * sx if inward else lo(box[1] / sx + 1e-9) * sx,
+                       lo(box[2] / sy - 1e-9) * sy if inward else lo(box[2] / sy + 1e-9) * sy,
+                       hi(box[3] / sx + 1e-9) * sx if inward else hi(box[3] / sx - 1e-9) * sx)
+                if box[0] < box[2] or box[3] < box[1]:
+                    raise PlanError("the box is smaller than one grid cell: make it larger")
+            self.area = [_num(x) for x in box]
         elif box is not None:
             self.warnings.append("this dataset is delivered for its whole domain: the area is cut after the "
                                  "download, so the download size does not depend on it")
@@ -316,6 +335,13 @@ class CdsPlan:
             cap = min(cap, self.spec.cds.max_request_gb * 1e9 / per)
         return max(1, int(cap))
 
+    def _cap_steps(self) -> int:
+        """Time steps one request may cover: one variable and level of it, decoded to float32 over the whole
+        delivered grid, must fit a third of the job's memory budget (the processor holds one such slab)."""
+        if not self.points:
+            return 10 ** 9
+        return max(1, int(self.spec.download.memory_gb * 1e9 / 3 // (self.points * 4)))
+
     def bytes_per_field(self) -> int | None:
         if self.points is None or self.desc.get("tier") != "grib":
             return None
@@ -402,7 +428,7 @@ class CdsPlan:
                     cand = None  # a new year starts: handled below by whole-year merging
                 else:
                     cand = None
-                if cand is not None and cand.n() * per_vl <= cap:
+                if cand is not None and cand.n() * per_vl <= cap and cand.n() <= self._cap_steps():
                     out[-1] = cand
                     continue
             out.append(b)
@@ -414,19 +440,19 @@ class CdsPlan:
                     and last.days == b.days and last.times == b.times
                     and int(b.years[0]) == int(last.years[-1]) + 1):
                 cand = _Block(last.years + b.years, b.months, b.days, b.times, last.start, b.end, True)
-                if cand.n() * per_vl <= cap:
+                if cand.n() * per_vl <= cap and cand.n() <= self._cap_steps():
                     years[-1] = cand
                     continue
             years.append(b)
         return years
 
     def _split_days(self, b: _Block, per_vl: int, cap: int) -> list[_Block]:
-        if b.n() * per_vl <= cap or not b.days:
+        if (b.n() * per_vl <= cap and b.n() <= self._cap_steps()) or not b.days:
             return [b]
         if len(b.years) > 1 or len(b.months or []) > 1:  # cannot happen: packing respects the cap
             return [b]
         per_day = len(b.times or [None]) * per_vl
-        k = max(1, cap // per_day)
+        k = max(1, min(cap // per_day, self._cap_steps() // len(b.times or [None])))
         out = []
         for i in range(0, len(b.days), k):
             days = b.days[i:i + k]
@@ -454,7 +480,8 @@ class CdsPlan:
 
         out = {}
         for r in self.requests:
-            bad = invalid(self.table, {k: v for k, v in r.inputs.items() if k not in ("area", "grid")})
+            # ranges and places are not single values: the constraints cannot check them one by one
+            bad = invalid(self.table, {k: v for k, v in r.inputs.items() if k not in ("area", "grid", "date", "location")})
             if bad:
                 out[r.index] = bad
         return out

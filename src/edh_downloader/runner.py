@@ -206,6 +206,10 @@ def run_foreground(job_dir: Path, verbose: bool = False) -> str:
         raise RuntimeError(f"job {job_dir.name} is already running")
     try:
         log = setup_logging(job_dir, to_stdout=verbose)
+        if (st.get("spec") or {}).get("source") == "cds":
+            from .sources.cds.engine import CdsEngine
+
+            return CdsEngine(job_dir, log).run()
         return Engine(job_dir, log).run()
     finally:
         os.close(lock)

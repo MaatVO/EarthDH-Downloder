@@ -319,6 +319,14 @@ def job_start(spec: dict) -> dict:
         raise ValueError("choose an output directory")
     if not 1 <= int(s.download.connections) <= 64:
         raise ValueError("connections must be between 1 and 64")
+    if src.id == sources.CDS:
+        if s.output.target_mode == "extend":
+            raise ValueError("extending an existing store is not available for Climate Data Store jobs yet")
+        if not 1 <= int(s.cds.max_inflight) <= 32:
+            raise ValueError("requests waiting on the CDS must be between 1 and 32")
+        files = Path(s.output.directory).expanduser() / f"{name}.files"
+        if files.exists():
+            raise ValueError(f"output {name} already exists in {s.output.directory}; choose another name")
     with runner.file_lock(runner.jobs_dir() / "start.lock"):  # a double click starts one job
         if s.output.target_mode == "extend":
             if not s.icechunk_path.exists():
@@ -361,6 +369,24 @@ def job_stop(jid: str, action: str) -> dict:
 def job_connections(jid: str, n: int) -> dict:
     runner.set_control(runner.resolve(jid), connections=int(n))
     return {"ok": True}
+
+
+def job_inflight(jid: str, n: int) -> dict:
+    """CDS jobs: how many requests may wait on the CDS at once (applies at the next queue pass)."""
+    if not 1 <= int(n) <= 32:
+        raise ValueError("between 1 and 32")
+    runner.set_control(runner.resolve(jid), max_inflight=int(n))
+    return {"ok": True}
+
+
+def job_requests(jid: str) -> dict:
+    """The ledger of a CDS job: every request with its state (without the request bodies)."""
+    from .util import read_json
+
+    d = read_json(runner.resolve(jid) / "requests.json", {}, dict)
+    keep = ("index", "state", "status", "start", "end", "fields", "variables", "levels", "size", "bytes_est",
+            "submitted_at", "started", "finished", "attempts", "error", "job_id")
+    return {"dataset": d.get("dataset"), "requests": [{k: e.get(k) for k in keep} for e in d.get("requests", [])]}
 
 
 def job_delete(jid: str) -> dict:
@@ -413,4 +439,4 @@ def store_inspect(path: str) -> dict:
 METHODS = {f.__name__: f for f in (
     hello, sources_list, keys_list, key_status, key_add, key_test, key_remove, key_default, key_set_quota, key_calibrate,
     collections, datasets, cds_describe, cds_check, cds_plan, dataset_load, plan, sample_run, job_start, jobs_list, job_resume, job_stop,
-    job_connections, job_delete, job_log, store_structure, store_inspect)}
+    job_connections, job_inflight, job_requests, job_delete, job_log, store_structure, store_inspect)}
