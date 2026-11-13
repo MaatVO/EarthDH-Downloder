@@ -24,7 +24,7 @@ from pathlib import Path
 
 from . import __version__
 
-REPO = "MaatVO/EarthDH-Downloder"
+REPO = "MaatVO/Weather-Dataset-Downloader"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 
 

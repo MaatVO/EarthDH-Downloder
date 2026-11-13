@@ -12,8 +12,8 @@ A resumable downloader for weather and climate datasets from **Earth Data Hub** 
 [![Zarr](https://img.shields.io/badge/Zarr-v3-orange)](https://zarr.dev/)
 [![Icechunk](https://img.shields.io/badge/Storage-Icechunk-blue)](https://icechunk.io/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/EarthDH-Downloder/build.yml?label=build)](.github/workflows/build.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/MaatVO/EarthDH-Downloder)](https://github.com/MaatVO/EarthDH-Downloder/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/Weather-Dataset-Downloader/build.yml?label=build)](.github/workflows/build.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/MaatVO/Weather-Dataset-Downloader)](https://github.com/MaatVO/Weather-Dataset-Downloader/releases)
 
 [Sources](#data-sources) · [Features](#features) · [Installation](#installation) · [Getting Started](#getting-started) · [Climate Data Store](#climate-data-store) · [CLI](#command-line-interface) · [Output](#output-formats) · [Architecture](#architecture) · [How it works](docs/README.md)
 
@@ -24,8 +24,6 @@ A resumable downloader for weather and climate datasets from **Earth Data Hub** 
 ## Overview
 
 **Weather Dataset Downloader** turns "I need these variables, over this region and period, at this resolution" into an analysis-ready dataset on your disk or your server, without pulling whole archives and without wasting your API allowance or your place in a queue.
-
-It started as a downloader for [Earth Data Hub](https://earthdatahub.destine.eu/) (as *EDH Downloader*). With the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) added as a second source, it is now a general tool for weather and climate datasets: one interface, one job model and one output format, whatever the source.
 
 It provides an interactive web interface, a command-line interface and a remote execution workflow over SSH.
 
@@ -170,7 +168,7 @@ The packaged application supports automatic updates, with release checksums veri
 
 Download the latest executable for your operating system from:
 
-**[GitHub Releases](https://github.com/MaatVO/EarthDH-Downloder/releases)**
+**[GitHub Releases](https://github.com/MaatVO/Weather-Dataset-Downloader/releases)**
 
 Launch the application:
 
@@ -194,9 +192,9 @@ Requirements:
 Clone the repository:
 
 ```bash
-git clone https://github.com/MaatVO/EarthDH-Downloder.git
+git clone https://github.com/MaatVO/Weather-Dataset-Downloader.git
 
-cd EarthDH-Downloder
+cd Weather-Dataset-Downloader
 ```
 
 Install dependencies:
@@ -216,7 +214,7 @@ uv run edh-dl serve
 If you already have the repository locally:
 
 ```bash
-uv tool install /path/to/EarthDH-Downloder
+uv tool install /path/to/Weather-Dataset-Downloader
 ```
 
 Then launch it using:
@@ -829,6 +827,6 @@ See [LICENSE](LICENSE) for the full license text.
 
 If you find Weather Dataset Downloader useful, consider giving the project a ⭐ on GitHub.
 
-[Repository](https://github.com/MaatVO/EarthDH-Downloder) · [Issues](https://github.com/MaatVO/EarthDH-Downloder/issues) · [Releases](https://github.com/MaatVO/EarthDH-Downloder/releases)
+[Repository](https://github.com/MaatVO/Weather-Dataset-Downloader) · [Issues](https://github.com/MaatVO/Weather-Dataset-Downloader/issues) · [Releases](https://github.com/MaatVO/Weather-Dataset-Downloader/releases)
 
 </div>
