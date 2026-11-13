@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -100,7 +101,46 @@ def home(tmp_path, monkeypatch):
     from edh_downloader import keys
 
     keys.add_key("test", "test-key", quota=100_000)
-    return tmp_path
+    yield tmp_path
+    _stop_workers()
+
+
+def _stop_workers(timeout: float = 30.0):
+    """Cancel and reap job workers a test left running (``service.job_start`` launches real detached processes).
+
+    A worker that outlives its test keeps talking to the session-wide fake servers and its requests show up in the
+    next test's call log. Reaping the pid directly matters: a dead child stays a zombie (and its pid "exists")
+    until its parent waits for it."""
+    import os
+    import signal
+    import time
+
+    from edh_downloader import runner
+
+    try:
+        jobs = runner.list_jobs()
+    except FileNotFoundError:
+        return
+    for j in jobs:
+        pid = j.get("pid")
+        if not j.get("alive") or not pid:
+            continue
+        runner.stop(Path(j["dir"]), "cancel")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                if os.waitpid(pid, os.WNOHANG)[0]:
+                    break
+            except ChildProcessError:  # not a child of this process: it is gone, or someone else reaps it
+                if not runner._pid_exists(pid):
+                    break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, signal.SIGKILL)
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
 
 
 @pytest.fixture(scope="session")
