@@ -303,7 +303,7 @@ def _connect_form(on_connected, open_local):
                 with ui.row().classes("w-full items-center justify-between edh-tour-connect"):
                     ui.switch("Remember this server (never the password)").bind_value(form, "remember")
                     btn = ui.button("Connect", icon="login").props("unelevated no-caps").classes(
-                        "edh-grad-btn px-6")
+                        "edh-primary-btn px-6")
                 status = ui.column().classes("w-full gap-0 edh-mono text-caption")
 
             with ui.column().classes("w-80 max-md:w-full gap-3 shrink-0"):
@@ -364,7 +364,7 @@ def _connect_form(on_connected, open_local):
                 ui.button("Cancel", on_click=dlg.close).props("flat no-caps")
                 for label, fn in actions:
                     ui.button(label, on_click=lambda fn=fn: (dlg.close(), fn())).props(
-                        "unelevated no-caps").classes("edh-grad-btn")
+                        "unelevated no-caps").classes("edh-primary-btn")
         dlg.on("hide", lambda: dlg.delete())
         dlg.open()
 

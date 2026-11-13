@@ -164,7 +164,7 @@ def welcome(on_start: Callable[[], None], on_skip: Callable[[], None], connect: 
         with ui.row().classes("w-full justify-end gap-2"):
             ui.button("Skip", on_click=lambda: (dlg.close(), on_skip())).props("flat no-caps")
             ui.button("Start the tour", icon="play_arrow", on_click=lambda: (dlg.close(), on_start())).props(
-                "unelevated no-caps").classes("edh-grad-btn")
+                "unelevated no-caps").classes("edh-primary-btn")
     dlg.on("hide", lambda: dlg.delete())
     dlg.open()
 

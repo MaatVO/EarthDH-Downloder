@@ -20,6 +20,7 @@ from nicegui import app, run, ui
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .. import __version__, chunking
+from .messages import dataset_error, display_version, launch_reason
 from ..backend import BackendError, Local
 from ..runner import ACTIVE
 from ..quota import next_reset
@@ -386,7 +387,7 @@ def section(n, title: str, subtitle: str = "", wide: bool = False, icon: str | N
             if icon:
                 ui.icon(icon, size="20px").classes("edh-muted")
             with ui.column().classes("gap-0"):
-                ui.label(title).classes("edh-title")
+                ui.label(title).classes("edh-title").props("role=heading aria-level=2")
                 if subtitle:
                     ui.label(subtitle).classes("edh-muted text-body2")
         with ui.column().classes("w-full gap-3 pt-1"):
@@ -597,7 +598,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             ui.html(logo.img(), sanitize=False)
             with ui.column().classes("gap-0"):
                 ui.label("Weather Dataset Downloader").classes("edh-brand").props("role=heading aria-level=1")
-                ui.label(f"Earth Data Hub and Climate Data Store → Icechunk / Zarr · v{__version__}").classes("edh-muted text-caption max-sm:hidden")
+                ui.label(f"Earth Data Hub and Climate Data Store → Icechunk / Zarr · v{display_version(__version__)}").classes("edh-muted text-caption max-sm:hidden")
         with ui.tabs().props("no-caps dense indicator-color=transparent active-class=edh-tab-active"
                              ).classes("edh-tabs edh-tour-tabs") as tabs:
             t_new = ui.tab("New job", icon="add_circle_outline").classes("edh-tour-tab-new")
@@ -606,15 +607,16 @@ def build_page(be, local: bool = False, embedded: bool = False):
         with ui.row().classes("items-center gap-3 no-wrap max-sm:w-full"):
             if not embedded:
                 ui.button("Tour", icon="school", on_click=lambda: run_tour()).props(
-                    "flat dense no-caps size=sm color=grey-5").tooltip("a guided tour of the app")
+                    "flat dense no-caps size=sm color=grey-5").classes("edh-tour-btn").tooltip("a guided tour of the app")
             with ui.column().classes("gap-1 items-end min-w-0 max-sm:grow edh-tour-quota"):
                 with ui.row().classes("items-center gap-1 no-wrap"):
-                    quota_label = ui.label().classes("text-caption")
+                    quota_label = ui.label().classes("text-caption").props("role=status")
                     quota_label.on("click", lambda: tabs.set_value(t_keys) if not f.get("key") else None)
                     with ui.link(target=QUOTA_URL, new_tab=True).classes("edh-quota-link").props(
                             'aria-label="Open the Earth Data Hub quota page"'):
                         ui.icon("open_in_new", size="14px")
-                        ui.tooltip("Your real usage is on the Earth Data Hub quota page: the app only counts its "
+                        ui.tooltip("Earth Data Hub does not report usage; this counts requests from this app. "
+                                   "Your real usage is on the Earth Data Hub quota page: the app only counts its "
                                    "own requests. Enter the number there in Keys → Calibrate.").classes("edh-tooltip")
                 quota_bar = ui.linear_progress(value=0, show_value=False).props(
                     'size=6px aria-label="Monthly quota used"').classes("edh-grad-bar w-48 max-w-full")
@@ -660,8 +662,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 "and to download." if cds else "An API key is required to inspect dataset variables, "
                                 "calculate request quotas, and download data.")
         if not k:
-            quota_label.text = "⚠️ no API key: add one in Keys"
-            quota_label.classes(replace="text-caption text-amber-400 font-medium cursor-pointer")
+            quota_label.text = ""  # the banner on New job is the one place that says a key is missing
             quota_bar.value = 0
             if missing_key_banner:
                 missing_key_banner.set_visibility(True)
@@ -674,7 +675,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             return
         q = k["usage"]
         pct = q["used"] / k["quota"] if k["quota"] else 0
-        quota_label.text = f"quota {q['used']:,} / {k['quota']:,} · resets {q['resets'][:10]}"
+        quota_label.text = f"quota {q['used']:,} / {k['quota']:,} · resets {q['resets'][:10]} · tracked locally"
         quota_bar.value = min(1.0, pct)
 
     key_select.on_value_change(lambda e: (f.update(key=e.value), ctx["keysel"].__setitem__(f["source"], e.value),
@@ -721,13 +722,15 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 ds_select = SearchSelect({}, label="Dataset").classes(
                                     "grow min-w-0 max-sm:order-last max-sm:basis-full")
                                 ui.button(icon="refresh", on_click=lambda: load_dataset(refresh=True)).props(
-                                    "flat round").tooltip("reload the dataset description from its source")
+                                    'flat round aria-label="Reload dataset description"').tooltip("reload the dataset description from its source")
                             with ui.row().classes("w-full items-start gap-4 no-wrap max-sm:flex-wrap"):
                                 ds_image = ui.element("div")
                                 with ui.column().classes("gap-1 grow min-w-0"):
                                     ds_title = ui.label().classes("edh-subtitle")
                                     ds_chips = ui.row().classes("gap-2")
-                            ds_info = ui.markdown().classes("text-body2 edh-muted")
+                            ds_info = ui.markdown().classes("text-body2 edh-muted").props("role=status")
+                            ds_err = ui.column().classes("w-full gap-2").props("role=alert")
+                            ds_err.set_visibility(False)
                             cds_box = ui.column().classes("w-full gap-3")  # CDS: tier, licences, dataset options
                             cds_box.set_visibility(False)
 
@@ -738,8 +741,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 with var_search.add_slot("prepend"):
                                     ui.icon("search")
                                 sel_label = ui.label().classes("edh-muted text-caption")
-                            sel_chips = ui.row().classes("gap-2 items-center w-full edh-sel-box").style("position:sticky;top:64px;z-index:5;padding:8px 12px")
+                            sel_chips = ui.row().classes("gap-2 items-center w-full edh-sel-box").style("position:sticky;top:64px;z-index:var(--z-sticky);padding:8px 12px")
                             var_table = ui.table(rows=[], columns=list(VAR_COLUMNS), row_key="name", selection="multiple", pagination=8).props("flat dense").classes("edh-table w-full")
+                            with var_table.add_slot("no-data"):
+                                var_empty = ui.label("Load a dataset to list its variables.").classes("edh-muted")
                             var_search.bind_value(var_table, "filter")
                             with ui.row().classes("items-center gap-2") as level_row:
                                 level_select = ui.select([], multiple=True, label="Pressure levels (hPa)").props(
@@ -758,15 +763,17 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                         with ui.menu().props("no-parent-event") as menu:
                                             ui.date().bind_value(inp)
                                         with inp.add_slot("append"):
-                                            ui.icon("event").on("click", menu.open).classes("cursor-pointer")
+                                            ui.icon("event").on("click", menu.open).classes("cursor-pointer").props(
+                                                'role=button tabindex=0 aria-label="Pick a date"').on(
+                                                "keydown.enter", menu.open)
+                                            if key_ == "end":
+                                                ui.button("Today", on_click=lambda: f.update(end=date.today().isoformat())).props(
+                                                    "flat dense no-caps size=sm").tooltip("set the last day to today")
                                     hour_inputs.append(with_tip(
-                                        ui.number("from hour" if hkey == "start_hour" else "to hour (incl.)",
-                                                  min=0, max=23, step=1, precision=0).bind_value(f, hkey).classes("w-32"),
+                                        ui.number("First day, from hour" if hkey == "start_hour" else "Last day, to hour (incl.)",
+                                                  min=0, max=23, step=1, precision=0).bind_value(f, hkey).classes("w-44"),
                                         "Hour of day (0-23, local time with the UTC offset below). First day starts "
                                         "at this hour; last day ends at the end of this hour."))
-                                    if key_ == "end":
-                                        ui.button("Today", on_click=lambda: f.update(end=date.today().isoformat())).props(
-                                            "flat dense no-caps").tooltip("set the last day to today")
                                 time_range_label = ui.label().classes("edh-muted text-caption")
                             with ui.row().classes("items-center gap-4"):
                                 freq_select = with_tip(ui.select(FREQS, label="Time step").bind_value(f, "freq").classes("w-48"),
@@ -793,12 +800,6 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 area_toggle = IconToggle({"global": ("Global", "public"), "bbox": ("Box", "crop_free"),
                                                           "points": ("Points", "place")}).bind_value(
                                     f, "mode").props("unelevated toggle-color=primary no-caps").classes("edh-toggle")
-                                with_tip(ui.select({"-180..180": "−180 … 180", "0..360": "0 … 360"},
-                                                   label="Output longitudes").bind_value(f, "lon_convention").classes("w-48"),
-                                         "How longitudes are numbered in the output. −180…180: west is negative, map "
-                                         "centred on Greenwich (usual for Europe/Africa). 0…360: ERA5's native order, "
-                                         "centred on the Pacific; use it for boxes crossing the 180° meridian so "
-                                         "longitudes stay increasing.")
                             # wraps: when the card is too narrow for both, the map goes full width under the inputs
                             with ui.row().classes("w-full items-stretch gap-5"):
                                 with ui.column().classes("gap-3 w-60 shrink-0") as bbox_box:
@@ -807,7 +808,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                         ui.number("South", min=-90, max=90, format="%.2f").bind_value(f, "south")
                                         ui.number("West", min=-180, max=360, format="%.2f").bind_value(f, "west")
                                         ui.number("East", min=-180, max=360, format="%.2f").bind_value(f, "east")
-                                    with ui.row().classes("gap-2"):
+                                    with ui.row().classes("gap-2 w-full"):
                                         for pname, b in PRESETS.items():
                                             ui.button(pname, on_click=lambda b=b: set_bbox(*b)).props("flat dense no-caps color=primary")
                                     ui.label("Or draw a rectangle on the map.").classes("edh-muted text-caption")
@@ -831,6 +832,14 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 area_map.clear_layers()
                                 area_map.tile_layer(url_template=OSM_TILES, options={
                                     "attribution": "&copy; OpenStreetMap contributors", "maxZoom": 19})
+                            with ui.expansion("Advanced", icon="tune").classes("edh-expansion w-full"):
+                                with ui.row().classes("p-3"):
+                                    with_tip(ui.select({"-180..180": "−180 … 180", "0..360": "0 … 360"},
+                                                       label="Output longitudes").bind_value(f, "lon_convention").classes("w-48"),
+                                             "How longitudes are numbered in the output. −180…180: west is negative, map "
+                                             "centred on Greenwich (usual for Europe/Africa). 0…360: ERA5's native order, "
+                                             "centred on the Pacific; use it for boxes crossing the 180° meridian so "
+                                             "longitudes stay increasing.")
                             with ui.row().classes("items-center gap-3") as grid_row:
                                 with_tip(ui.select(GRIDS, label="Grid").bind_value(f, "grid").classes("w-36"),
                                          "Native keeps the dataset's own grid (ERA5: 0.25°, ERA5-Land: 0.1°). A coarser "
@@ -972,8 +981,8 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 with ui.card().classes("edh-card edh-summary edh-tour-summary w-[26rem] max-lg:w-full sticky shrink-0 "
                                        "edh-scroll").style(
                         "top:80px;max-height:calc(100vh - 100px);overflow-y:auto"):
-                    ui.label("Summary").classes("edh-title")
-                    summary = ui.column().classes("gap-3 w-full")
+                    ui.label("Summary").classes("edh-title").props("role=heading aria-level=2")
+                    summary = ui.column().classes("gap-3 w-full").props("role=status")
                     with ui.row().classes("w-full items-center gap-3 no-wrap") as conn_row:
                         with_tip(ui.number("Connections", min=1, max=64, step=1).bind_value(
                             f, "connections").classes("w-32"),
@@ -1030,9 +1039,10 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                 tip("At the limit: wait for the reset on the 1st and continue. Off: pause the job.")
                     with ui.column().classes("w-full gap-3 edh-tour-launch"):
                         launch_btn = ui.button("Launch job", icon="rocket_launch").props(
-                            "unelevated no-caps size=lg").classes("edh-grad-btn w-full")
+                            "unelevated no-caps size=lg").classes("edh-primary-btn w-full")
+                        launch_why = ui.label().classes("edh-muted text-caption").props("role=status")
                         ui.button("Download job.json", icon="file_download", on_click=lambda: save_job_file()).props(
-                            "outline no-caps color=white").classes("w-full")
+                            "flat no-caps color=grey-5").classes("w-full")
                     ui.label("Runs in the background: you can close this page.").classes("edh-muted text-caption")
 
         # ================================================================ JOBS
@@ -1105,11 +1115,35 @@ def build_page(be, local: bool = False, embedded: bool = False):
         ds_title.text = info.get("title", info["id"])
         ds_chips.clear()
 
+    def show_dataset_error(e, service="Earth Data Hub"):
+        """Say what went wrong in terms of what the user can do, with the raw message under Details."""
+        err = dataset_error(e, f.get("key"), service)
+        ds_info.content = ""
+        ds_err.clear()
+        ds_err.set_visibility(True)
+        with ds_err:
+            with ui.row().classes("items-start gap-2 no-wrap"):
+                ui.icon("error_outline", color="negative", size="sm")
+                ui.label(err["title"]).classes("text-negative text-weight-medium")
+            with ui.row().classes("gap-2"):
+                if err["action"] == "keys":
+                    ui.button("Test key in Keys", icon="vpn_key", on_click=lambda: tabs.set_value(t_keys)).props(
+                        "outline dense no-caps color=negative")
+                else:
+                    ui.button("Retry", icon="refresh", on_click=lambda: load_dataset(refresh=True)).props(
+                        "outline dense no-caps color=negative")
+            with ui.expansion("Details").classes("w-full edh-expansion").props("dense"):
+                ui.label(err["details"]).classes("edh-mono text-caption edh-muted break-all")
+        var_empty.text = err["title"]
+
     async def load_dataset(refresh=False):
         info = ctx.get("items", {}).get(f["dataset"])
         if not info:
             return
         show_dataset(info)
+        ds_err.clear()
+        ds_err.set_visibility(False)
+        var_empty.text = "Load a dataset to list its variables."
         if f["source"] == "cds":
             await load_cds_dataset(info, refresh)
             return
@@ -1124,7 +1158,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             ds = await be.call("dataset_load", info=info, key=f["key"], refresh=refresh)
         except BackendError as e:
             if f["dataset"] == info["id"] and f["source"] == "edh":
-                ds_info.content = f"**Could not load dataset:** {e}"
+                show_dataset_error(e)
             return
         if f["dataset"] != info["id"] or f["source"] != "edh":  # another dataset or source was chosen meanwhile
             return
@@ -1161,7 +1195,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             d = await be.call("cds_describe", dataset=info["id"], key=f["key"], refresh=refresh)
         except BackendError as e:
             if f["dataset"] == info["id"] and f["source"] == "cds":
-                ds_info.content = f"**Could not read the dataset:** {e}"
+                show_dataset_error(e, "Climate Data Store")
             return
         if d["id"] != f["dataset"] or f["source"] != "cds":  # another dataset or source was chosen meanwhile
             return
@@ -1407,7 +1441,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
         ctx["src_gen"] += 1
         ctx["plan_seq"] += 1
         ctx.update(ds=None, info=None, cds_desc=None, plan=None, rec=None, items={}, cds_opts_box=None, cds_opt_sel={})
-        launch_btn.disable()
+        block_launch()
         var_table.rows, var_table.selected = [], []
         var_table.update()
         level_row.set_visibility(False)
@@ -1674,17 +1708,30 @@ def build_page(be, local: bool = False, embedded: bool = False):
                                   wait_for_quota=f["wait_for_quota"], memory_gb=float(f["memory_gb"] or 16)),
         )
 
+    def block_launch(reason: str = "", **kw):
+        """Disable Launch and say why in one line under it (the reasons come from the same checks)."""
+        launch_btn.disable()
+        text = launch_reason(False, bool(f.get("key")), **({"error": reason} if reason else {}), **kw)
+        launch_why.text = text
+        launch_why.set_visibility(bool(text))
+
+    def allow_launch(ok: bool = True, blocked: list[str] | None = None):
+        launch_btn.set_enabled(ok)
+        why = "" if ok else launch_reason(False, True, blocked=blocked)
+        launch_why.text = why
+        launch_why.set_visibility(bool(why))
+
     def schedule_plan():
         if ctx["plan_task"]:
             ctx["plan_task"].cancel()
         ctx["plan"] = None  # the form changed: the plan shown no longer applies, so it cannot be launched
-        launch_btn.disable()
+        block_launch(planning=True)
         ctx["plan_task"] = ui.timer(0.4, update_plan, once=True)
 
     def plan_failed(e):
         """A plan that cannot be shown is not launched either: the button stays disabled and the reason is shown."""
         ctx["plan"] = None
-        launch_btn.disable()
+        block_launch("The plan could not be shown.")
         summary.clear()
         with summary:
             with ui.row().classes("items-start gap-2 no-wrap"):
@@ -1693,25 +1740,25 @@ def build_page(be, local: bool = False, embedded: bool = False):
 
     async def update_plan():
         ctx["plan"] = None  # until this plan is ready, the previous one must not be launched
-        launch_btn.disable()
+        block_launch(planning=True)
         ds = ctx["ds"]
         ctx["plan_seq"] += 1
         seq = ctx["plan_seq"]
         summary.clear()
         with summary:
             if not f.get("key"):
-                ui.label("⚠️ Climate Data Store key required. Add your token in the Keys tab to check licences and "
-                         "costs and to download." if f["source"] == "cds" else
-                         "⚠️ Earth Data Hub API key required. Add your key in the Keys tab to view request cost and plan downloads.").classes("text-amber-400 font-medium")
-                launch_btn.disable()
+                ui.label("Add your key in the Keys tab to check licences and costs and to download."
+                         if f["source"] == "cds" else
+                         "Add your key in the Keys tab to view request cost and plan downloads.").classes("edh-muted")
+                block_launch()
                 return
             if f.get("target_mode") == "extend" and not (f.get("target_store") or "").strip():
                 ui.label("Enter an existing Icechunk store path in Output to extend.").classes("edh-muted")
-                launch_btn.disable()
+                block_launch("Enter the store to extend in Output.")
                 return
             if not ds:
                 ui.label("Select a dataset to see the plan.").classes("edh-muted")
-                launch_btn.disable()
+                block_launch("Select a dataset first.")
                 return
             try:
                 spec_ = build_spec()
@@ -1738,7 +1785,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 with ui.row().classes("items-start gap-2 no-wrap"):
                     ui.icon("error_outline", color="negative")
                     ui.label(res["error"]).classes("text-negative")
-                launch_btn.disable()
+                block_launch(res["error"])
                 return
         try:
             ctx["rec"] = tuple(res["rec"])
@@ -1752,7 +1799,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 out_paths.text = f"→ Extending ({direction}) in {tgt}"
             else:
                 out_paths.text = "→ " + "   ·   ".join(p for p in (res["paths"]["zarr"], res["paths"]["icechunk"]) if p)
-            launch_btn.enable()
+            allow_launch()
         except Exception as e:  # noqa: BLE001
             plan_failed(e)
 
@@ -1842,7 +1889,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
         else:
             out_paths.text = "→ " + "   ·   ".join(str(p) for p, keep in ((spec_.zarr_path, o.export_zarr),
                                                                           (spec_.icechunk_path, o.keep_icechunk)) if keep)
-        launch_btn.set_enabled(not blocked)
+        allow_launch(not blocked, blocked)
 
     def render_cds_structure(res):
         """The Zarr store a CDS job will write, as for Earth Data Hub, from the plan alone (``CdsOutput.preview``):
@@ -2062,7 +2109,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             with ui.row().classes("justify-end w-full gap-2"):
                 ui.button("Cancel", on_click=dlg.close).props("flat no-caps")
                 ui.button(f"Use {n} requests", on_click=lambda: go()).props(
-                    "unelevated no-caps").classes("edh-grad-btn")
+                    "unelevated no-caps").classes("edh-primary-btn")
         dlg.open()
 
     async def run_sample(n):
@@ -2437,7 +2484,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                         if st == "failed":  # the note says what to fix first; retrying is not the loudest thing here
                             resume.props("outline no-caps color=primary")
                         else:
-                            resume.props("unelevated no-caps").classes("edh-grad-btn")
+                            resume.props("unelevated no-caps").classes("edh-primary-btn")
                     if src:
                         shown = s["id"] in open_struct
                         ui.button("Structure", icon="account_tree", on_click=lambda j=s["id"]: toggle_struct(j)).props(
@@ -2515,13 +2562,13 @@ def build_page(be, local: bool = False, embedded: bool = False):
                 if danger:
                     btn.props("unelevated no-caps color=negative text-color=dark")
                 else:
-                    btn.props("unelevated no-caps").classes("edh-grad-btn")
+                    btn.props("unelevated no-caps").classes("edh-primary-btn")
         dlg.open()
 
     def show_log(jid):
         with dialog_host, ui.dialog().props("maximized") as dlg, ui.card().classes("edh-card w-full h-full"):
             with ui.row().classes("w-full justify-between items-center"):
-                ui.label(f"Log · {jid}").classes("edh-title")
+                ui.label(f"Log · {jid}").classes("edh-title").props("role=heading aria-level=2")
                 ui.button(icon="close", on_click=dlg.close).props('flat round aria-label="Close"')
             log = ui.log(max_lines=2000).classes("edh-log w-full grow")
             pos = {"n": 0}
@@ -2653,7 +2700,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
                     await refresh_key_list()
                     await refresh_keys_select()
 
-                ui.button("Add", icon="add", on_click=add).props("unelevated no-caps").classes("edh-grad-btn")
+                ui.button("Add", icon="add", on_click=add).props("unelevated no-caps").classes("edh-primary-btn")
 
     def key_card(k: dict, src: dict, default: str | None):
         with ui.card().classes("edh-card w-full"):
@@ -2707,7 +2754,7 @@ def build_page(be, local: bool = False, embedded: bool = False):
             with ui.row().classes("items-center gap-3"):
                 ui.button("Check on Earth Data Hub", icon="open_in_new",
                           on_click=lambda: ui.navigate.to(QUOTA_URL, new_tab=True)).props(
-                    "unelevated no-caps").classes("edh-grad-btn")
+                    "unelevated no-caps").classes("edh-primary-btn")
                 used_in = ui.number("Used, as shown on the EDH quota page", min=0).classes("w-80")
 
                 async def calibrate(u=used_in, n=k["name"]):
