@@ -24,7 +24,7 @@ from pathlib import Path
 
 from . import __version__
 
-REPO = "MaatVO/weatherfetch"
+REPO = "MaatVO/WeatherFetch"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 
 

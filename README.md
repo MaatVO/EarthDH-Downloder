@@ -12,8 +12,8 @@ A resumable downloader for weather and climate datasets from **Earth Data Hub** 
 [![Zarr](https://img.shields.io/badge/Zarr-v3-orange)](https://zarr.dev/)
 [![Icechunk](https://img.shields.io/badge/Storage-Icechunk-blue)](https://icechunk.io/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/weatherfetch/build.yml?label=build)](.github/workflows/build.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/MaatVO/weatherfetch)](https://github.com/MaatVO/weatherfetch/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/MaatVO/WeatherFetch/build.yml?label=build)](.github/workflows/build.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/MaatVO/WeatherFetch)](https://github.com/MaatVO/WeatherFetch/releases)
 
 [Sources](#data-sources) · [Features](#features) · [Installation](#installation) · [Getting Started](#getting-started) · [Climate Data Store](#climate-data-store) · [CLI](#command-line-interface) · [Output](#output-formats) · [Architecture](#architecture) · [How it works](docs/README.md)
 
@@ -168,7 +168,7 @@ The packaged application supports automatic updates, with release checksums veri
 
 Download the latest executable for your operating system from:
 
-**[GitHub Releases](https://github.com/MaatVO/weatherfetch/releases)**
+**[GitHub Releases](https://github.com/MaatVO/WeatherFetch/releases)**
 
 Launch the application:
 
@@ -192,9 +192,9 @@ Requirements:
 Clone the repository:
 
 ```bash
-git clone https://github.com/MaatVO/weatherfetch.git
+git clone https://github.com/MaatVO/WeatherFetch.git
 
-cd weatherfetch
+cd WeatherFetch
 ```
 
 Install dependencies:
@@ -214,7 +214,7 @@ uv run edh-dl serve
 If you already have the repository locally:
 
 ```bash
-uv tool install /path/to/weatherfetch
+uv tool install /path/to/WeatherFetch
 ```
 
 Then launch it using:
@@ -827,6 +827,6 @@ See [LICENSE](LICENSE) for the full license text.
 
 If you find Weather Dataset Downloader useful, consider giving the project a ⭐ on GitHub.
 
-[Repository](https://github.com/MaatVO/weatherfetch) · [Issues](https://github.com/MaatVO/weatherfetch/issues) · [Releases](https://github.com/MaatVO/weatherfetch/releases)
+[Repository](https://github.com/MaatVO/WeatherFetch) · [Issues](https://github.com/MaatVO/WeatherFetch/issues) · [Releases](https://github.com/MaatVO/WeatherFetch/releases)
 
 </div>
